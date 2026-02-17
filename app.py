@@ -4,21 +4,75 @@ import json, os, csv
 from datetime import datetime
 import matplotlib
 matplotlib.use("TkAgg")
-import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
 
-# ── Palette ──────────────────────────────────────────────────────
-BG      = "#FFF0F5"
-PANEL   = "#FFE4EF"
-ACCENT  = "#FF85A1"
-ACCENT2 = "#FFB3C6"
-TEXT    = "#7D3C5A"
-SUBTEXT = "#C07A9A"
-WHITE   = "#FFFFFF"
-GREEN   = "#C8F0D0"
-RED     = "#FFD6D6"
-GOLD    = "#FFE9A0"
-BORDER  = "#F7B8D0"
+# ── Icon paths (sit next to the script) ──────────────────────────
+_DIR       = os.path.dirname(os.path.abspath(__file__))
+ICON_ICO   = os.path.join(_DIR, "icon.ico")
+ICON_PNG   = os.path.join(_DIR, "icon.png")
+
+# ── Theme definitions ─────────────────────────────────────────────
+THEMES = {
+    "💖 Soft Pink": {
+        "BG":"#FFF0F5","PANEL":"#FFE4EF","ACCENT":"#FF85A1","ACCENT2":"#FFB3C6",
+        "TEXT":"#7D3C5A","SUBTEXT":"#C07A9A","BORDER":"#F7B8D0","WHITE":"#FFFFFF",
+        "GREEN":"#C8F0D0","RED":"#FFD6D6","GOLD":"#FFE9A0",
+        "CHART":["#FFB3C6","#FFDDC1","#C1F0C8","#C1D4F0","#E8C1F0",
+                 "#F0E8C1","#C1EEF0","#F0C1C1","#D4F0C1","#F0C1E8"],
+    },
+    "🌸 Hot Pink": {
+        "BG":"#FFF0FA","PANEL":"#FF69B4","ACCENT":"#FF1493","ACCENT2":"#FF69B4",
+        "TEXT":"#4A0030","SUBTEXT":"#C2185B","BORDER":"#FF69B4","WHITE":"#FFFFFF",
+        "GREEN":"#C8F0D0","RED":"#FFD6D6","GOLD":"#FFE9A0",
+        "CHART":["#FF69B4","#FF1493","#FFB3C6","#FF85A1","#FFDDE8",
+                 "#FF4081","#F48FB1","#FCE4EC","#FF80AB","#F06292"],
+    },
+    "💜 Lavender Dream": {
+        "BG":"#F5F0FF","PANEL":"#E8DAFF","ACCENT":"#9B59B6","ACCENT2":"#C39BD3",
+        "TEXT":"#4A235A","SUBTEXT":"#8E44AD","BORDER":"#D2B4DE","WHITE":"#FFFFFF",
+        "GREEN":"#D5F5E3","RED":"#FADBD8","GOLD":"#FEF9E7",
+        "CHART":["#C39BD3","#A569BD","#D7BDE2","#E8DAFF","#F4ECF7",
+                 "#BB8FCE","#8E44AD","#9B59B6","#6C3483","#D2B4DE"],
+    },
+    "🌿 Mint Fresh": {
+        "BG":"#F0FFF8","PANEL":"#CCFCE8","ACCENT":"#00B894","ACCENT2":"#55EFC4",
+        "TEXT":"#1B5E3B","SUBTEXT":"#27AE60","BORDER":"#A8E6CF","WHITE":"#FFFFFF",
+        "GREEN":"#D5F5E3","RED":"#FADBD8","GOLD":"#FEF9E7",
+        "CHART":["#A8E6CF","#55EFC4","#00CEC9","#81ECEC","#00B894",
+                 "#DCEDC8","#B2DFDB","#80CBC4","#4DB6AC","#26A69A"],
+    },
+    "🌙 Midnight Glam": {
+        "BG":"#1A1A2E","PANEL":"#16213E","ACCENT":"#E91E8C","ACCENT2":"#FF6B9D",
+        "TEXT":"#F0E6FF","SUBTEXT":"#C084FC","BORDER":"#7C3AED","WHITE":"#2D2D4E",
+        "GREEN":"#1A472A","RED":"#4A1020","GOLD":"#3D3000",
+        "CHART":["#E91E8C","#FF6B9D","#C084FC","#7C3AED","#F472B6",
+                 "#A855F7","#EC4899","#8B5CF6","#DB2777","#7C3AED"],
+    },
+    "🍑 Peachy Keen": {
+        "BG":"#FFF8F0","PANEL":"#FFE5CC","ACCENT":"#FF7043","ACCENT2":"#FFAB91",
+        "TEXT":"#4E2012","SUBTEXT":"#BF360C","BORDER":"#FFCCBC","WHITE":"#FFFFFF",
+        "GREEN":"#C8F0D0","RED":"#FFD6D6","GOLD":"#FFE9A0",
+        "CHART":["#FFAB91","#FF8A65","#FF7043","#FFCCBC","#FFE0B2",
+                 "#FFCA28","#FFA726","#FF7043","#FF5722","#BF360C"],
+    },
+    "☁️ Cloud Baby": {
+        "BG":"#F8F9FF","PANEL":"#E3E8FF","ACCENT":"#7986CB","ACCENT2":"#9FA8DA",
+        "TEXT":"#283593","SUBTEXT":"#5C6BC0","BORDER":"#C5CAE9","WHITE":"#FFFFFF",
+        "GREEN":"#E8F5E9","RED":"#FCE4EC","GOLD":"#FFF9C4",
+        "CHART":["#9FA8DA","#7986CB","#5C6BC0","#C5CAE9","#E3E8FF",
+                 "#B0BEC5","#90CAF9","#80DEEA","#A5D6A7","#F48FB1"],
+    },
+    "🌺 Tropical Slay": {
+        "BG":"#FFFDE7","PANEL":"#FFF9C4","ACCENT":"#F9A825","ACCENT2":"#FFD54F",
+        "TEXT":"#4A3000","SUBTEXT":"#F57F17","BORDER":"#FFE082","WHITE":"#FFFFFF",
+        "GREEN":"#C8F0D0","RED":"#FFD6D6","GOLD":"#FFF3CD",
+        "CHART":["#FFD54F","#FFCA28","#FFC107","#FFB300","#FFA000",
+                 "#FF8F00","#FF6F00","#FF7043","#FF5722","#BF360C"],
+    },
+}
+
+T = dict(THEMES["💖 Soft Pink"])  # Active theme — mutable, shared by all widgets
 
 FNT       = ("Helvetica", 11)
 FNT_B     = ("Helvetica", 12, "bold")
@@ -32,796 +86,760 @@ CATEGORIES = ["🛍️ Shopping","🍔 Food & Dining","🏠 Housing","💅 Self-
               "🚗 Transport","💊 Health","📚 Education","🎉 Entertainment",
               "✈️ Travel","💡 Utilities","💼 Income","🎁 Gifts","📦 Other"]
 
-APPLE_CATEGORY_MAP = {
-    "food and drink": "🍔 Food & Dining",
-    "restaurants": "🍔 Food & Dining",
-    "groceries": "🍔 Food & Dining",
-    "shopping": "🛍️ Shopping",
-    "entertainment": "🎉 Entertainment",
-    "travel": "✈️ Travel",
-    "transportation": "🚗 Transport",
-    "health": "💊 Health",
-    "utilities": "💡 Utilities",
-    "education": "📚 Education",
-    "personal care": "💅 Self-care",
-    "gifts": "🎁 Gifts",
+APPLE_MAP = {
+    "food and drink":"🍔 Food & Dining","restaurants":"🍔 Food & Dining",
+    "groceries":"🍔 Food & Dining","shopping":"🛍️ Shopping",
+    "entertainment":"🎉 Entertainment","travel":"✈️ Travel",
+    "transportation":"🚗 Transport","health":"💊 Health",
+    "utilities":"💡 Utilities","education":"📚 Education",
+    "personal care":"💅 Self-care","gifts":"🎁 Gifts",
 }
 
-def map_apple_category(raw):
-    if not raw:
-        return "📦 Other"
-    raw_lower = raw.lower()
-    for k, v in APPLE_CATEGORY_MAP.items():
-        if k in raw_lower:
-            return v
+def map_cat(raw):
+    if not raw: return "📦 Other"
+    for k,v in APPLE_MAP.items():
+        if k in raw.lower(): return v
     return "📦 Other"
 
 def load_data():
     if os.path.exists(DATA_FILE):
-        with open(DATA_FILE) as f:
-            return json.load(f)
-    return {"transactions": [], "savings_goals": [], "budgets": {}}
+        with open(DATA_FILE) as f: return json.load(f)
+    return {"transactions":[],"savings_goals":[],"budgets":{},"theme":"💖 Soft Pink"}
 
 def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    with open(DATA_FILE,"w") as f: json.dump(data,f,indent=2)
 
-def styled_btn(parent, text, cmd, color=None, fg=WHITE, **kw):
-    color = color or ACCENT
+def btn(parent, text, cmd, color=None, fg=None, **kw):
+    bg = color or T["ACCENT"]
+    fg = fg or T["WHITE"]
     return tk.Button(parent, text=text, command=cmd, font=FNT_B,
-                     bg=color, fg=fg, bd=0, padx=16, pady=8,
-                     cursor="hand2", activebackground=ACCENT2,
-                     activeforeground=WHITE, relief="flat", **kw)
-
-def card_frame(parent, **kw):
-    return tk.Frame(parent, bg=WHITE, highlightbackground=BORDER,
-                    highlightthickness=1, **kw)
+                     bg=bg, fg=fg, bd=0, padx=14, pady=7,
+                     cursor="hand2", relief="flat",
+                     activebackground=T["ACCENT2"],
+                     activeforeground=T["TEXT"], **kw)
 
 
 # ══════════════════════════════════════════════════════════════════
 class FinanceApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("🚨 Girl Do Not Buy That")
-        self.geometry("1100x750")
-        self.minsize(950, 680)
-        self.configure(bg=BG)
+        self.title("🚨 Girl Don't Buy That")
+        self.geometry("1120x760")
+        self.minsize(960,680)
         self.data = load_data()
-        self._style()
-        self._build_ui()
+        saved = self.data.get("theme","💖 Soft Pink")
+        if saved in THEMES: T.update(THEMES[saved])
+        self.configure(bg=T["BG"])
+        self._set_icon()
+        self._ttk_style()
+        self._build()
         self.show_frame("dashboard")
 
-    def _style(self):
+    def _set_icon(self):
+        """Set window icon — works on Windows (.ico) and Mac/Linux (.png)."""
+        try:
+            if os.name == "nt" and os.path.exists(ICON_ICO):
+                self.iconbitmap(ICON_ICO)
+            elif os.path.exists(ICON_PNG):
+                from tkinter import PhotoImage
+                # Use PIL for better PNG support
+                try:
+                    from PIL import Image, ImageTk
+                    img = Image.open(ICON_PNG).resize((64, 64), Image.LANCZOS)
+                    self._icon_img = ImageTk.PhotoImage(img)
+                    self.iconphoto(True, self._icon_img)
+                except ImportError:
+                    ico = PhotoImage(file=ICON_PNG)
+                    self.iconphoto(True, ico)
+        except Exception:
+            pass  # Icon is cosmetic — never crash over it
+
+    def _ttk_style(self):
         s = ttk.Style()
         s.theme_use("clam")
-        s.configure("Pink.Treeview", background=WHITE, fieldbackground=WHITE,
-                    foreground=TEXT, font=FNT, rowheight=30)
-        s.configure("Pink.Treeview.Heading", background=PANEL,
-                    foreground=TEXT, font=FNT_B, relief="flat")
-        s.map("Pink.Treeview", background=[("selected", ACCENT2)])
-        s.configure("TCombobox", fieldbackground=BG, background=BG,
-                    foreground=TEXT, arrowcolor=ACCENT)
+        s.configure("A.Treeview", background=T["WHITE"], fieldbackground=T["WHITE"],
+                    foreground=T["TEXT"], font=FNT, rowheight=30)
+        s.configure("A.Treeview.Heading", background=T["PANEL"],
+                    foreground=T["TEXT"], font=FNT_B, relief="flat")
+        s.map("A.Treeview", background=[("selected",T["ACCENT2"])])
+        s.configure("TCombobox", fieldbackground=T["BG"], foreground=T["TEXT"])
 
-    def _build_ui(self):
-        # Sidebar
-        sb = tk.Frame(self, bg=PANEL, width=195)
-        sb.pack(side="left", fill="y")
-        sb.pack_propagate(False)
+    def _build(self):
+        self.configure(bg=T["BG"])
+        self.sb = tk.Frame(self, bg=T["PANEL"], width=205)
+        self.sb.pack(side="left", fill="y")
+        self.sb.pack_propagate(False)
 
-        tk.Label(sb, text="💖", font=("Helvetica", 34), bg=PANEL, fg=ACCENT).pack(pady=(22,2))
-        tk.Label(sb, text="Girl Do Not Buy That", font=FNT_B, bg=PANEL,
-                 fg=TEXT, justify="center").pack()
-        tk.Frame(sb, bg=BORDER, height=1).pack(fill="x", padx=18, pady=14)
+        self.sb_ico  = tk.Label(self.sb, text="🚨", font=("Helvetica",32), bg=T["PANEL"], fg=T["ACCENT"])
+        self.sb_ico.pack(pady=(20,2))
+        self.sb_ttl  = tk.Label(self.sb, text="Girl Don't\nBuy That 🚨",
+                                 font=FNT_B, bg=T["PANEL"], fg=T["TEXT"], justify="center")
+        self.sb_ttl.pack()
+        self.sb_div  = tk.Frame(self.sb, bg=T["BORDER"], height=1)
+        self.sb_div.pack(fill="x", padx=18, pady=12)
 
-        self.nav_btns = {}
-        for label, key in [("🏠  Dashboard",    "dashboard"),
-                            ("💸  Transactions", "transactions"),
-                            ("📥  Import CSV",   "import_csv"),
-                            ("🗂️  Budgets",      "budgets"),
-                            ("🌟  Savings Goals","savings"),
-                            ("📊  Summary",      "summary")]:
-            b = tk.Button(sb, text=label, font=FNT, bg=PANEL, fg=TEXT,
-                          bd=0, anchor="w", padx=20, pady=11, cursor="hand2",
-                          activebackground=ACCENT2, relief="flat",
+        self.nav = {}
+        nav_items = [("🏠  Home Base","dashboard"),("💸  The Damage","transactions"),
+                     ("📥  Drop the Receipts","import_csv"),("🗂️  Damage Control","budgets"),
+                     ("🌟  Dream Big Sis","savings"),("📊  The Hard Truth","summary"),
+                     ("🎨  Switch Vibes","themes")]
+        for label, key in nav_items:
+            b = tk.Button(self.sb, text=label, font=FNT, bg=T["PANEL"], fg=T["TEXT"],
+                          bd=0, anchor="w", padx=20, pady=10, cursor="hand2",
+                          activebackground=T["ACCENT2"], relief="flat",
                           command=lambda k=key: self.show_frame(k))
             b.pack(fill="x")
-            self.nav_btns[key] = b
+            self.nav[key] = b
 
-        # Content
-        self.content = tk.Frame(self, bg=BG)
-        self.content.pack(side="left", fill="both", expand=True)
+        self.ct = tk.Frame(self, bg=T["BG"])
+        self.ct.pack(side="left", fill="both", expand=True)
 
         self.frames = {}
-        for name, cls in [("dashboard",    DashboardFrame),
-                           ("transactions", TransactionsFrame),
-                           ("import_csv",   ImportCSVFrame),
-                           ("budgets",      BudgetsFrame),
-                           ("savings",      SavingsFrame),
-                           ("summary",      SummaryFrame)]:
-            f = cls(self.content, self)
+        for name, cls in [("dashboard",DashboardFrame),("transactions",TransactionsFrame),
+                           ("import_csv",ImportCSVFrame),("budgets",BudgetsFrame),
+                           ("savings",SavingsFrame),("summary",SummaryFrame),
+                           ("themes",ThemesFrame)]:
+            f = cls(self.ct, self)
             f.place(relx=0, rely=0, relwidth=1, relheight=1)
             self.frames[name] = f
 
-    def show_frame(self, name):
-        for k, b in self.nav_btns.items():
-            b.configure(bg=ACCENT if k == name else PANEL,
-                        fg=WHITE if k == name else TEXT)
-        self.frames[name].tkraise()
-        if hasattr(self.frames[name], "refresh"):
-            self.frames[name].refresh()
-
-    def add_transaction(self, t):
-        self.data["transactions"].append(t)
+    def apply_theme(self, name):
+        T.update(THEMES[name])
+        self.data["theme"] = name
         save_data(self.data)
+        self.configure(bg=T["BG"])
+        self._ttk_style()
+        self.sb.configure(bg=T["PANEL"])
+        self.sb_ico.configure(bg=T["PANEL"], fg=T["ACCENT"])
+        self.sb_ttl.configure(bg=T["PANEL"], fg=T["TEXT"])
+        self.sb_div.configure(bg=T["BORDER"])
+        for b in self.nav.values():
+            b.configure(bg=T["PANEL"], fg=T["TEXT"], activebackground=T["ACCENT2"])
+        self.ct.configure(bg=T["BG"])
+        for f in self.frames.values():
+            if hasattr(f,"retheme"): f.retheme()
+        self.show_frame("themes")
+
+    def show_frame(self, name):
+        for k,b in self.nav.items():
+            b.configure(bg=T["ACCENT"] if k==name else T["PANEL"],
+                        fg=T["WHITE"]  if k==name else T["TEXT"])
+        self.frames[name].tkraise()
+        if hasattr(self.frames[name],"refresh"): self.frames[name].refresh()
+
+
+# ══════════════════════════════════════════════════════════════════
+class ThemesFrame(tk.Frame):
+    def __init__(self, parent, app):
+        super().__init__(parent, bg=T["BG"])
+        self.app = app
+        self.grid_f = None
+        self._header()
+
+    def _header(self):
+        self.ttl = tk.Label(self, text="🎨 Switch Vibes", font=FNT_TITLE,
+                             bg=T["BG"], fg=T["TEXT"])
+        self.ttl.pack(pady=(20,2))
+        self.sub = tk.Label(self, text="Pick your aesthetic, queen 👑 Changes save automatically ✨",
+                             font=FNT, bg=T["BG"], fg=T["SUBTEXT"])
+        self.sub.pack(pady=(0,14))
+        self.grid_f = tk.Frame(self, bg=T["BG"])
+        self.grid_f.pack(fill="both", expand=True, padx=30, pady=4)
+
+    def retheme(self):
+        self.configure(bg=T["BG"])
+        self.ttl.configure(bg=T["BG"], fg=T["TEXT"])
+        self.sub.configure(bg=T["BG"], fg=T["SUBTEXT"])
+        self.grid_f.configure(bg=T["BG"])
+        self._populate()
+
+    def refresh(self):
+        self.retheme()
+
+    def _populate(self):
+        for w in self.grid_f.winfo_children(): w.destroy()
+        current = self.app.data.get("theme","💖 Soft Pink")
+        col = row = 0
+        for name, th in THEMES.items():
+            active = (name == current)
+            rim = tk.Frame(self.grid_f,
+                           bg=th["ACCENT"] if active else th["BORDER"],
+                           padx=3, pady=3)
+            rim.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
+            card = tk.Frame(rim, bg=th["BG"], padx=16, pady=14, cursor="hand2")
+            card.pack(fill="both", expand=True)
+            # Swatches
+            sw = tk.Frame(card, bg=th["BG"])
+            sw.pack(pady=(0,6))
+            for c in [th["PANEL"],th["ACCENT"],th["ACCENT2"],th["BORDER"]]:
+                tk.Frame(sw, bg=c, width=24, height=24).pack(side="left", padx=2)
+            tk.Label(card, text=name, font=FNT_B, bg=th["BG"], fg=th["TEXT"]).pack()
+            if active:
+                tk.Label(card, text="✓ Slaying rn", font=FNT_S,
+                         bg=th["BG"], fg=th["ACCENT"]).pack(pady=(4,0))
+            else:
+                tk.Button(card, text="Wear This One 💅", font=FNT_S,
+                          bg=th["ACCENT"], fg=th["WHITE"], bd=0, padx=10, pady=5,
+                          cursor="hand2", relief="flat",
+                          command=lambda n=name: self.app.apply_theme(n)
+                          ).pack(pady=(6,0))
+            col += 1
+            if col >= 4: col=0; row+=1
+        for c in range(4): self.grid_f.columnconfigure(c, weight=1)
 
 
 # ══════════════════════════════════════════════════════════════════
 class DashboardFrame(tk.Frame):
     def __init__(self, parent, app):
-        super().__init__(parent, bg=BG)
+        super().__init__(parent, bg=T["BG"])
         self.app = app
-        hdr = tk.Frame(self, bg=ACCENT, pady=16)
-        hdr.pack(fill="x")
-        tk.Label(hdr, text="✨ Welcome to Girl Do Not Buy That 🚨 ✨",
-                 font=FNT_TITLE, bg=ACCENT, fg=WHITE).pack()
-        self.body = tk.Frame(self, bg=BG)
+        self.hdr = tk.Frame(self, bg=T["ACCENT"], pady=16)
+        self.hdr.pack(fill="x")
+        self.hdr_l = tk.Label(self.hdr, text="🚨 Girl, Don't Buy That. 🚨",
+                               font=FNT_TITLE, bg=T["ACCENT"], fg=T["WHITE"])
+        self.hdr_l.pack()
+        self.body = tk.Frame(self, bg=T["BG"])
         self.body.pack(fill="both", expand=True, padx=28, pady=18)
 
+    def retheme(self):
+        self.configure(bg=T["BG"])
+        self.hdr.configure(bg=T["ACCENT"])
+        self.hdr_l.configure(bg=T["ACCENT"], fg=T["WHITE"])
+        self.body.configure(bg=T["BG"])
+        self.refresh()
+
     def refresh(self):
-        for w in self.body.winfo_children():
-            w.destroy()
-        data = self.app.data
-        txns = data["transactions"]
-        now = datetime.now()
-        mt = [t for t in txns
-              if datetime.fromisoformat(t["date"]).month == now.month
-              and datetime.fromisoformat(t["date"]).year == now.year]
+        self.configure(bg=T["BG"])
+        self.body.configure(bg=T["BG"])
+        for w in self.body.winfo_children(): w.destroy()
+        txns = self.app.data["transactions"]
+        now  = datetime.now()
+        mt   = [t for t in txns if
+                datetime.fromisoformat(t["date"]).month==now.month and
+                datetime.fromisoformat(t["date"]).year==now.year]
+        income  = sum(t["amount"] for t in mt if t["type"]=="income")
+        expense = sum(t["amount"] for t in mt if t["type"]=="expense")
 
-        income  = sum(t["amount"] for t in mt if t["type"] == "income")
-        expense = sum(t["amount"] for t in mt if t["type"] == "expense")
-        balance = income - expense
-
-        # Summary tiles
-        row = tk.Frame(self.body, bg=BG)
+        row = tk.Frame(self.body, bg=T["BG"])
         row.pack(fill="x", pady=(0,14))
         for title, val, color, icon in [
-            ("Balance",  balance, ACCENT,   "💰"),
-            ("Income",   income,  "#7DC99A","📈"),
-            ("Expenses", expense, "#E07A7A","📉")]:
-            c = card_frame(row, padx=18, pady=14)
+                ("What's Left 😬", income-expense, T["ACCENT"],"💰"),
+                ("Money In 🙏",    income,          "#7DC99A", "📈"),
+                ("Crimes 💀",      expense,         "#E07A7A", "📉")]:
+            c = tk.Frame(row, bg=T["WHITE"], highlightbackground=T["BORDER"],
+                         highlightthickness=1, padx=18, pady=14)
             c.pack(side="left", expand=True, fill="both", padx=6)
-            tk.Label(c, text=icon, font=("Helvetica",26), bg=WHITE).pack()
-            tk.Label(c, text=title, font=FNT, bg=WHITE, fg=SUBTEXT).pack()
-            tk.Label(c, text=f"${val:,.2f}", font=FNT_BIG, bg=WHITE, fg=color).pack()
-            tk.Label(c, text="this month", font=FNT_S, bg=WHITE, fg=SUBTEXT).pack()
+            tk.Label(c, text=icon, font=("Helvetica",26), bg=T["WHITE"]).pack()
+            tk.Label(c, text=title, font=FNT, bg=T["WHITE"], fg=T["SUBTEXT"]).pack()
+            tk.Label(c, text=f"${val:,.2f}", font=FNT_BIG, bg=T["WHITE"], fg=color).pack()
+            tk.Label(c, text="this month, bestie", font=FNT_S, bg=T["WHITE"], fg=T["SUBTEXT"]).pack()
 
-        # Recent transactions
-        tk.Label(self.body, text="🕐 Recent Transactions", font=FNT_B,
-                 bg=BG, fg=TEXT).pack(anchor="w", pady=(8,4))
-        c = card_frame(self.body)
+        tk.Label(self.body, text="🕐 Recent Bad Decisions", font=FNT_B,
+                 bg=T["BG"], fg=T["TEXT"]).pack(anchor="w", pady=(8,4))
+        c = tk.Frame(self.body, bg=T["WHITE"], highlightbackground=T["BORDER"], highlightthickness=1)
         c.pack(fill="x")
         recent = sorted(txns, key=lambda t: t["date"], reverse=True)[:8]
         if not recent:
-            tk.Label(c, text="No transactions yet 🌸  Import a CSV or add one!",
-                     font=FNT, bg=WHITE, fg=SUBTEXT, pady=14).pack()
+            tk.Label(c, text="Nothing here yet... suspicious 👀  Import a CSV or confess a purchase!",
+                     font=FNT, bg=T["WHITE"], fg=T["SUBTEXT"], pady=14).pack()
         for t in recent:
-            bg   = GREEN if t["type"] == "income" else RED
-            sign = "+" if t["type"] == "income" else "-"
-            r = tk.Frame(c, bg=WHITE)
+            bg_c = T["GREEN"] if t["type"]=="income" else T["RED"]
+            sign = "+" if t["type"]=="income" else "-"
+            r = tk.Frame(c, bg=T["WHITE"])
             r.pack(fill="x", padx=14, pady=3)
-            tk.Label(r, text=t["category"], font=FNT, bg=WHITE, fg=TEXT,
+            tk.Label(r, text=t["category"], font=FNT, bg=T["WHITE"], fg=T["TEXT"],
                      width=20, anchor="w").pack(side="left")
-            tk.Label(r, text=t.get("note",""), font=FNT_S, bg=WHITE, fg=SUBTEXT,
+            tk.Label(r, text=t.get("note",""), font=FNT_S, bg=T["WHITE"], fg=T["SUBTEXT"],
                      width=24, anchor="w").pack(side="left")
-            tk.Label(r, text=t["date"][:10], font=FNT_S, bg=WHITE, fg=SUBTEXT,
-                     width=11).pack(side="left")
+            tk.Label(r, text=t["date"][:10], font=FNT_S, bg=T["WHITE"],
+                     fg=T["SUBTEXT"], width=11).pack(side="left")
             tk.Label(r, text=f"{sign}${t['amount']:.2f}", font=FNT_B,
-                     bg=bg, fg=TEXT, padx=8).pack(side="right", pady=2)
+                     bg=bg_c, fg=T["TEXT"], padx=8).pack(side="right", pady=2)
 
-        styled_btn(self.body, "＋ Add Transaction",
-                   lambda: self.app.show_frame("transactions")).pack(pady=12)
+        btn(self.body, "＋ Confess a Purchase 🛍️",
+            lambda: self.app.show_frame("transactions")).pack(pady=12)
 
 
 # ══════════════════════════════════════════════════════════════════
 class TransactionsFrame(tk.Frame):
     def __init__(self, parent, app):
-        super().__init__(parent, bg=BG)
+        super().__init__(parent, bg=T["BG"])
         self.app = app
         self._build()
 
     def _build(self):
-        tk.Label(self, text="💸 Transactions", font=FNT_TITLE,
-                 bg=BG, fg=TEXT).pack(pady=(18,4))
-
-        form = card_frame(self, padx=22, pady=14)
+        tk.Label(self, text="💸 The Confessional Booth", font=FNT_TITLE,
+                 bg=T["BG"], fg=T["TEXT"]).pack(pady=(18,4))
+        form = tk.Frame(self, bg=T["WHITE"], highlightbackground=T["BORDER"],
+                        highlightthickness=1, padx=22, pady=14)
         form.pack(fill="x", padx=28, pady=(0,10))
 
-        # Type row
-        r1 = tk.Frame(form, bg=WHITE)
-        r1.pack(fill="x", pady=3)
-        tk.Label(r1, text="Type:", font=FNT, bg=WHITE, fg=TEXT).pack(side="left")
+        r1 = tk.Frame(form, bg=T["WHITE"]); r1.pack(fill="x", pady=3)
+        tk.Label(r1, text="Type:", font=FNT, bg=T["WHITE"], fg=T["TEXT"]).pack(side="left")
         self.type_var = tk.StringVar(value="expense")
-        for val, lbl in [("expense","💸 Expense"),("income","💰 Income")]:
+        for val,lbl in [("expense","💸 Expense"),("income","💰 Income")]:
             tk.Radiobutton(r1, text=lbl, variable=self.type_var, value=val,
-                           font=FNT, bg=WHITE, fg=TEXT, selectcolor=ACCENT2,
-                           activebackground=WHITE).pack(side="left", padx=10)
+                           font=FNT, bg=T["WHITE"], fg=T["TEXT"],
+                           selectcolor=T["ACCENT2"], activebackground=T["WHITE"]
+                           ).pack(side="left", padx=10)
 
-        # Category + Amount
-        r2 = tk.Frame(form, bg=WHITE)
-        r2.pack(fill="x", pady=3)
-        tk.Label(r2, text="Category:", font=FNT, bg=WHITE, fg=TEXT,
+        r2 = tk.Frame(form, bg=T["WHITE"]); r2.pack(fill="x", pady=3)
+        tk.Label(r2, text="Category:", font=FNT, bg=T["WHITE"], fg=T["TEXT"],
                  width=10, anchor="w").pack(side="left")
         self.cat_var = tk.StringVar(value=CATEGORIES[0])
         ttk.Combobox(r2, textvariable=self.cat_var, values=CATEGORIES,
                      font=FNT, width=22, state="readonly").pack(side="left", padx=6)
-        tk.Label(r2, text="Amount: $", font=FNT, bg=WHITE, fg=TEXT).pack(side="left", padx=(14,0))
+        tk.Label(r2, text="Amount: $", font=FNT, bg=T["WHITE"],
+                 fg=T["TEXT"]).pack(side="left", padx=(14,0))
         self.amt_var = tk.StringVar()
-        tk.Entry(r2, textvariable=self.amt_var, font=FNT, width=10,
-                 bg=BG, fg=TEXT, relief="flat",
-                 highlightbackground=BORDER, highlightthickness=1).pack(side="left", padx=4)
+        tk.Entry(r2, textvariable=self.amt_var, font=FNT, width=10, bg=T["BG"],
+                 fg=T["TEXT"], relief="flat", highlightbackground=T["BORDER"],
+                 highlightthickness=1).pack(side="left", padx=4)
 
-        # Date + Note
-        r3 = tk.Frame(form, bg=WHITE)
-        r3.pack(fill="x", pady=3)
-        tk.Label(r3, text="Date:", font=FNT, bg=WHITE, fg=TEXT,
+        r3 = tk.Frame(form, bg=T["WHITE"]); r3.pack(fill="x", pady=3)
+        tk.Label(r3, text="Date:", font=FNT, bg=T["WHITE"], fg=T["TEXT"],
                  width=10, anchor="w").pack(side="left")
         self.date_var = tk.StringVar(value=datetime.now().strftime("%Y-%m-%d"))
-        tk.Entry(r3, textvariable=self.date_var, font=FNT, width=13,
-                 bg=BG, fg=TEXT, relief="flat",
-                 highlightbackground=BORDER, highlightthickness=1).pack(side="left", padx=6)
-        tk.Label(r3, text="Note:", font=FNT, bg=WHITE, fg=TEXT).pack(side="left", padx=(14,0))
+        tk.Entry(r3, textvariable=self.date_var, font=FNT, width=13, bg=T["BG"],
+                 fg=T["TEXT"], relief="flat", highlightbackground=T["BORDER"],
+                 highlightthickness=1).pack(side="left", padx=6)
+        tk.Label(r3, text="Note:", font=FNT, bg=T["WHITE"], fg=T["TEXT"]).pack(side="left", padx=(14,0))
         self.note_var = tk.StringVar()
-        tk.Entry(r3, textvariable=self.note_var, font=FNT, width=28,
-                 bg=BG, fg=TEXT, relief="flat",
-                 highlightbackground=BORDER, highlightthickness=1).pack(side="left", padx=6)
+        tk.Entry(r3, textvariable=self.note_var, font=FNT, width=28, bg=T["BG"],
+                 fg=T["TEXT"], relief="flat", highlightbackground=T["BORDER"],
+                 highlightthickness=1).pack(side="left", padx=6)
 
-        styled_btn(form, "＋ Add Transaction", self._add).pack(pady=(10,0))
+        btn(form, "＋ Add It (I Won't Judge... Much) 👀", self._add).pack(pady=(10,0))
 
-        # Tree
-        tk.Label(self, text="All Transactions", font=FNT_B,
-                 bg=BG, fg=TEXT).pack(anchor="w", padx=28, pady=(8,2))
-        wrap = tk.Frame(self, bg=BG)
-        wrap.pack(fill="both", expand=True, padx=28, pady=(0,4))
+        tk.Label(self, text="The Full Evidence File 🗂️", font=FNT_B,
+                 bg=T["BG"], fg=T["TEXT"]).pack(anchor="w", padx=28, pady=(8,2))
+        self.wrap = tk.Frame(self, bg=T["BG"])
+        self.wrap.pack(fill="both", expand=True, padx=28, pady=(0,4))
         cols = ("Date","Type","Category","Merchant / Note","Amount")
-        self.tree = ttk.Treeview(wrap, columns=cols, show="headings",
-                                 style="Pink.Treeview")
-        for col, w in zip(cols,[100,80,150,230,100]):
-            self.tree.heading(col, text=col)
-            self.tree.column(col, width=w, anchor="center")
-        sb2 = ttk.Scrollbar(wrap, orient="vertical", command=self.tree.yview)
+        self.tree = ttk.Treeview(self.wrap, columns=cols, show="headings", style="A.Treeview")
+        for col,w in zip(cols,[100,80,150,230,100]):
+            self.tree.heading(col,text=col); self.tree.column(col,width=w,anchor="center")
+        sb2 = ttk.Scrollbar(self.wrap, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=sb2.set)
         self.tree.pack(side="left", fill="both", expand=True)
         sb2.pack(side="right", fill="y")
+        btn(self, "🗑️ Delete the Evidence", self._delete, color="#E07A7A").pack(pady=8)
 
-        styled_btn(self, "🗑️ Delete Selected", self._delete,
-                   color="#E07A7A").pack(pady=8)
+    def retheme(self):
+        self.configure(bg=T["BG"])
+        for w in self.winfo_children(): w.destroy()
+        self._build(); self.refresh()
 
     def _add(self):
-        try:
-            amt = float(self.amt_var.get())
+        try: amt = float(self.amt_var.get())
         except ValueError:
-            messagebox.showerror("Oops!", "Please enter a valid amount 💕"); return
-        t = {"date": self.date_var.get() + "T00:00:00",
-             "type": self.type_var.get(),
-             "category": self.cat_var.get(),
-             "note": self.note_var.get(),
-             "amount": amt}
-        self.app.add_transaction(t)
-        self.amt_var.set("")
-        self.note_var.set("")
+            messagebox.showerror("Girl...","Bestie that's not a number 💀"); return
+        self.app.data["transactions"].append({
+            "date":self.date_var.get()+"T00:00:00","type":self.type_var.get(),
+            "category":self.cat_var.get(),"note":self.note_var.get(),"amount":amt})
+        save_data(self.app.data)
+        self.amt_var.set(""); self.note_var.set("")
         self.refresh()
 
     def _delete(self):
         sel = self.tree.selection()
         if not sel: return
-        iid = sel[0]
-        idx = self.tree.index(iid)
-        txns_sorted = sorted(self.app.data["transactions"],
-                             key=lambda t: t["date"], reverse=True)
-        self.app.data["transactions"].remove(txns_sorted[idx])
-        save_data(self.app.data)
-        self.refresh()
+        txns_sorted = sorted(self.app.data["transactions"], key=lambda t:t["date"], reverse=True)
+        self.app.data["transactions"].remove(txns_sorted[self.tree.index(sel[0])])
+        save_data(self.app.data); self.refresh()
 
     def refresh(self):
-        for row in self.tree.get_children():
-            self.tree.delete(row)
-        txns = sorted(self.app.data["transactions"],
-                      key=lambda t: t["date"], reverse=True)
-        for t in txns:
-            sign = "+" if t["type"] == "income" else "-"
-            self.tree.insert("", "end",
-                values=(t["date"][:10], t["type"].capitalize(),
-                        t["category"], t.get("note",""),
-                        f"{sign}${t['amount']:.2f}"))
+        for row in self.tree.get_children(): self.tree.delete(row)
+        for t in sorted(self.app.data["transactions"], key=lambda t:t["date"], reverse=True):
+            sign = "+" if t["type"]=="income" else "-"
+            self.tree.insert("","end", values=(t["date"][:10],t["type"].capitalize(),
+                             t["category"],t.get("note",""),f"{sign}${t['amount']:.2f}"))
 
 
 # ══════════════════════════════════════════════════════════════════
 class ImportCSVFrame(tk.Frame):
     def __init__(self, parent, app):
-        super().__init__(parent, bg=BG)
-        self.app = app
-        self.preview_data = []
+        super().__init__(parent, bg=T["BG"])
+        self.app = app; self.preview_data = []
         self._build()
 
     def _build(self):
-        tk.Label(self, text="📥 Import Apple Wallet CSV", font=FNT_TITLE,
-                 bg=BG, fg=TEXT).pack(pady=(18,4))
-
-        # Info card
-        info = card_frame(self, padx=22, pady=14)
+        tk.Label(self, text="📥 Drop the Evidence, Bestie", font=FNT_TITLE,
+                 bg=T["BG"], fg=T["TEXT"]).pack(pady=(18,4))
+        info = tk.Frame(self, bg=T["WHITE"], highlightbackground=T["BORDER"],
+                        highlightthickness=1, padx=22, pady=14)
         info.pack(fill="x", padx=28, pady=(0,10))
-        tk.Label(info, text="💡 Expected columns (any order, case-insensitive):",
-                 font=FNT_B, bg=WHITE, fg=TEXT).pack(anchor="w")
-        tk.Label(info,
-                 text="  Transaction Date  •  Description  •  Merchant  •  Category  •  Type  •  Amount",
-                 font=FNT, bg=WHITE, fg=SUBTEXT).pack(anchor="w")
-        tk.Label(info,
-                 text="  Amounts can be positive or negative. 'Debit'/'Credit' in Type are auto-detected.",
-                 font=FNT_S, bg=WHITE, fg=SUBTEXT).pack(anchor="w", pady=(2,0))
+        tk.Label(info, text="💡 Your CSV should have these columns (we need to talk about each one):",
+                 font=FNT_B, bg=T["WHITE"], fg=T["TEXT"]).pack(anchor="w")
+        tk.Label(info, text="  Transaction Date  •  Description  •  Merchant  •  Category  •  Type  •  Amount",
+                 font=FNT, bg=T["WHITE"], fg=T["SUBTEXT"]).pack(anchor="w")
+        tk.Label(info, text="  Negatives = you spent it. Positives = you earned it. Simple math, queen 👑",
+                 font=FNT_S, bg=T["WHITE"], fg=T["SUBTEXT"]).pack(anchor="w", pady=(2,0))
 
-        btn_row = tk.Frame(self, bg=BG)
-        btn_row.pack(pady=6)
-        styled_btn(btn_row, "📂 Choose CSV File", self._browse).pack(side="left", padx=6)
-        styled_btn(btn_row, "✅ Import All", self._import_all,
-                   color="#7DC99A", fg=TEXT).pack(side="left", padx=6)
+        br = tk.Frame(self, bg=T["BG"]); br.pack(pady=6)
+        btn(br, "📂 Upload the Receipts", self._browse).pack(side="left", padx=6)
+        btn(br, "😤 Import All (Deep Breath)", self._import_all,
+            color="#7DC99A", fg=T["TEXT"]).pack(side="left", padx=6)
 
-        self.status = tk.Label(self, text="", font=FNT, bg=BG, fg=SUBTEXT)
+        self.status = tk.Label(self, text="", font=FNT, bg=T["BG"], fg=T["SUBTEXT"])
         self.status.pack()
-
-        # Preview tree
-        tk.Label(self, text="Preview", font=FNT_B, bg=BG, fg=TEXT
-                 ).pack(anchor="w", padx=28, pady=(8,2))
-        wrap = tk.Frame(self, bg=BG)
+        tk.Label(self, text="Crime Scene Preview 🔍", font=FNT_B,
+                 bg=T["BG"], fg=T["TEXT"]).pack(anchor="w", padx=28, pady=(8,2))
+        wrap = tk.Frame(self, bg=T["BG"])
         wrap.pack(fill="both", expand=True, padx=28, pady=(0,8))
         cols = ("Date","Type","Category","Description/Merchant","Amount")
-        self.tree = ttk.Treeview(wrap, columns=cols, show="headings",
-                                 style="Pink.Treeview")
-        for col, w in zip(cols,[100,80,150,250,100]):
-            self.tree.heading(col, text=col)
-            self.tree.column(col, width=w, anchor="center")
+        self.tree = ttk.Treeview(wrap, columns=cols, show="headings", style="A.Treeview")
+        for col,w in zip(cols,[100,80,150,250,100]):
+            self.tree.heading(col,text=col); self.tree.column(col,width=w,anchor="center")
         sb2 = ttk.Scrollbar(wrap, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=sb2.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        sb2.pack(side="right", fill="y")
+        self.tree.pack(side="left", fill="both", expand=True); sb2.pack(side="right", fill="y")
+
+    def retheme(self):
+        self.configure(bg=T["BG"])
+        for w in self.winfo_children(): w.destroy()
+        self._build()
 
     def _browse(self):
-        path = filedialog.askopenfilename(
-            title="Select Apple Wallet CSV",
-            filetypes=[("CSV files","*.csv"),("All files","*.*")])
-        if not path:
-            return
-        self._load_csv(path)
+        path = filedialog.askopenfilename(title="Select Apple Wallet CSV",
+               filetypes=[("CSV files","*.csv"),("All files","*.*")])
+        if path: self._load_csv(path)
 
     def _load_csv(self, path):
         self.preview_data = []
-        for row in self.tree.get_children():
-            self.tree.delete(row)
+        for row in self.tree.get_children(): self.tree.delete(row)
         try:
             with open(path, newline="", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f)
-                # Normalise headers
-                raw_headers = reader.fieldnames or []
-                header_map = {h.lower().strip(): h for h in raw_headers}
-
-                def get(row, *keys):
+                hmap = {h.lower().strip():h for h in (reader.fieldnames or [])}
+                def get(row,*keys):
                     for k in keys:
-                        for hk, orig in header_map.items():
-                            if k in hk:
-                                return row.get(orig, "").strip()
+                        for hk,orig in hmap.items():
+                            if k in hk: return row.get(orig,"").strip()
                     return ""
-
                 count = 0
                 for row in reader:
-                    date_raw   = get(row, "transaction date","date")
-                    desc       = get(row, "description","merchant","memo")
-                    merchant   = get(row, "merchant","vendor","description")
-                    category   = get(row, "category")
-                    type_raw   = get(row, "type","transaction type")
-                    amount_raw = get(row, "amount")
-
-                    if not amount_raw:
-                        continue
-
-                    # Parse amount
-                    amount_str = amount_raw.replace("$","").replace(",","").strip()
-                    try:
-                        amount = float(amount_str)
-                    except ValueError:
-                        continue
-
-                    # Determine income vs expense
-                    type_lower = type_raw.lower()
-                    if "credit" in type_lower or "payment" in type_lower:
-                        txn_type = "income"
-                    elif "debit" in type_lower or "purchase" in type_lower:
-                        txn_type = "expense"
-                    elif amount < 0:
-                        txn_type = "expense"
-                        amount = abs(amount)
-                    else:
-                        txn_type = "expense"
-
-                    # Ensure amount positive
+                    amt_raw = get(row,"amount")
+                    if not amt_raw: continue
+                    try: amount = float(amt_raw.replace("$","").replace(",",""))
+                    except ValueError: continue
+                    tl = get(row,"type","transaction type").lower()
+                    txn_type = "income" if ("credit" in tl or "payment" in tl) else "expense"
                     amount = abs(amount)
-
-                    # Map category
-                    mapped_cat = map_apple_category(category)
-
-                    # Parse date
+                    date_raw = get(row,"transaction date","date")
                     date_iso = datetime.now().isoformat()
                     for fmt in ["%m/%d/%Y","%Y-%m-%d","%d/%m/%Y","%m-%d-%Y"]:
-                        try:
-                            date_iso = datetime.strptime(date_raw, fmt).isoformat()
-                            break
-                        except ValueError:
-                            pass
-
-                    note = merchant if merchant else desc
-
-                    txn = {"date": date_iso, "type": txn_type,
-                           "category": mapped_cat, "note": note,
-                           "amount": amount}
+                        try: date_iso=datetime.strptime(date_raw,fmt).isoformat(); break
+                        except: pass
+                    merchant = get(row,"merchant","vendor","description")
+                    desc     = get(row,"description","merchant","memo")
+                    note     = merchant if merchant else desc
+                    txn = {"date":date_iso,"type":txn_type,
+                           "category":map_cat(get(row,"category")),
+                           "note":note,"amount":amount}
                     self.preview_data.append(txn)
-
-                    sign = "+" if txn_type == "income" else "-"
-                    self.tree.insert("","end",
-                        values=(date_iso[:10], txn_type.capitalize(),
-                                mapped_cat, note, f"{sign}${amount:.2f}"))
+                    sign = "+" if txn_type=="income" else "-"
+                    self.tree.insert("","end", values=(date_iso[:10],txn_type.capitalize(),
+                                     txn["category"],note,f"{sign}${amount:.2f}"))
                     count += 1
-
             self.status.configure(
-                text=f"✨ Loaded {count} transactions — click 'Import All' to save!",
+                text=f"👀 {count} transactions loaded... we need to have a little chat. Hit Import!",
                 fg="#7DC99A")
         except Exception as e:
-            messagebox.showerror("Error", f"Could not read CSV:\n{e}")
-            self.status.configure(text="❌ Failed to load file.", fg="#E07A7A")
+            messagebox.showerror("Error",f"Could not read CSV:\n{e}")
+            self.status.configure(text="❌ File refused to cooperate. Typical. 😤", fg="#E07A7A")
 
     def _import_all(self):
         if not self.preview_data:
-            messagebox.showinfo("Nothing to import",
-                                "Please choose a CSV file first 💕"); return
-        # Deduplicate by date+note+amount
-        existing = {(t["date"][:10], t["note"], t["amount"])
-                    for t in self.app.data["transactions"]}
+            messagebox.showinfo("Babe...","Bestie you need to pick a file first 😭"); return
+        existing = {(t["date"][:10],t["note"],t["amount"]) for t in self.app.data["transactions"]}
         added = 0
         for t in self.preview_data:
-            key = (t["date"][:10], t["note"], t["amount"])
+            key = (t["date"][:10],t["note"],t["amount"])
             if key not in existing:
-                self.app.data["transactions"].append(t)
-                existing.add(key)
-                added += 1
+                self.app.data["transactions"].append(t); existing.add(key); added+=1
         save_data(self.app.data)
         self.status.configure(
-            text=f"🎉 Imported {added} new transactions! ({len(self.preview_data)-added} duplicates skipped)",
-            fg=ACCENT)
-        messagebox.showinfo("Done!", f"Imported {added} transactions 🌸")
+            text=f"🎉 Imported {added} transactions. No judgment. Okay a LITTLE judgment. ({len(self.preview_data)-added} dupes skipped 🙏)",
+            fg=T["ACCENT"])
+        messagebox.showinfo("Okay... 😤",f"Imported {added} transactions. We're gonna be okay 🌸")
 
-    def refresh(self):
-        pass
+    def refresh(self): pass
 
 
 # ══════════════════════════════════════════════════════════════════
 class BudgetsFrame(tk.Frame):
     def __init__(self, parent, app):
-        super().__init__(parent, bg=BG)
-        self.app = app
-        self._build()
+        super().__init__(parent, bg=T["BG"])
+        self.app = app; self._build()
 
     def _build(self):
-        tk.Label(self, text="🗂️ Budget Categories", font=FNT_TITLE,
-                 bg=BG, fg=TEXT).pack(pady=(18,4))
-
-        form = card_frame(self, padx=22, pady=14)
+        tk.Label(self, text="🗂️ Damage Control HQ", font=FNT_TITLE,
+                 bg=T["BG"], fg=T["TEXT"]).pack(pady=(18,4))
+        form = tk.Frame(self, bg=T["WHITE"], highlightbackground=T["BORDER"],
+                        highlightthickness=1, padx=22, pady=14)
         form.pack(fill="x", padx=28, pady=(0,10))
-        r = tk.Frame(form, bg=WHITE)
-        r.pack(fill="x")
-        tk.Label(r, text="Category:", font=FNT, bg=WHITE, fg=TEXT).pack(side="left")
+        r = tk.Frame(form, bg=T["WHITE"]); r.pack(fill="x")
+        tk.Label(r,text="Category:",font=FNT,bg=T["WHITE"],fg=T["TEXT"]).pack(side="left")
         self.bcat_var = tk.StringVar(value=CATEGORIES[0])
-        ttk.Combobox(r, textvariable=self.bcat_var, values=CATEGORIES,
-                     font=FNT, width=22, state="readonly").pack(side="left", padx=8)
-        tk.Label(r, text="Monthly Budget: $", font=FNT, bg=WHITE, fg=TEXT).pack(side="left", padx=(14,0))
+        ttk.Combobox(r,textvariable=self.bcat_var,values=CATEGORIES,
+                     font=FNT,width=22,state="readonly").pack(side="left",padx=8)
+        tk.Label(r,text="Monthly Limit (try not to laugh): $",font=FNT,
+                 bg=T["WHITE"],fg=T["TEXT"]).pack(side="left",padx=(14,0))
         self.blimit_var = tk.StringVar()
-        tk.Entry(r, textvariable=self.blimit_var, font=FNT, width=10,
-                 bg=BG, fg=TEXT, relief="flat",
-                 highlightbackground=BORDER, highlightthickness=1).pack(side="left", padx=4)
-        styled_btn(form, "Set Budget", self._set_budget).pack(pady=(10,0))
+        tk.Entry(r,textvariable=self.blimit_var,font=FNT,width=10,bg=T["BG"],
+                 fg=T["TEXT"],relief="flat",highlightbackground=T["BORDER"],
+                 highlightthickness=1).pack(side="left",padx=4)
+        btn(form,"Lock It In 🔒",self._set).pack(pady=(10,0))
+        self.body = tk.Frame(self, bg=T["BG"])
+        self.body.pack(fill="both", expand=True, padx=28, pady=8)
 
-        self.budget_body = tk.Frame(self, bg=BG)
-        self.budget_body.pack(fill="both", expand=True, padx=28, pady=8)
+    def retheme(self):
+        self.configure(bg=T["BG"])
+        for w in self.winfo_children(): w.destroy()
+        self._build(); self.refresh()
 
-    def _set_budget(self):
-        try:
-            limit = float(self.blimit_var.get())
+    def _set(self):
+        try: limit = float(self.blimit_var.get())
         except ValueError:
-            messagebox.showerror("Oops!", "Enter a valid amount 💕"); return
+            messagebox.showerror("Girl...","That's not a number, babe 😭"); return
         self.app.data["budgets"][self.bcat_var.get()] = limit
-        save_data(self.app.data)
-        self.blimit_var.set("")
-        self.refresh()
+        save_data(self.app.data); self.blimit_var.set(""); self.refresh()
 
     def refresh(self):
-        for w in self.budget_body.winfo_children():
-            w.destroy()
-        budgets = self.app.data.get("budgets", {})
+        for w in self.body.winfo_children(): w.destroy()
+        self.body.configure(bg=T["BG"])
+        budgets = self.app.data.get("budgets",{})
         if not budgets:
-            tk.Label(self.budget_body, text="No budgets set yet 🌸 Add one above!",
-                     font=FNT, bg=BG, fg=SUBTEXT).pack(pady=20); return
-
+            tk.Label(self.body,text="No budgets set... which honestly explains a lot 👀",
+                     font=FNT,bg=T["BG"],fg=T["SUBTEXT"]).pack(pady=20); return
         now = datetime.now()
-        txns = self.app.data["transactions"]
-        mt   = [t for t in txns
-                if datetime.fromisoformat(t["date"]).month == now.month
-                and datetime.fromisoformat(t["date"]).year == now.year
-                and t["type"] == "expense"]
-
-        for cat, limit in budgets.items():
-            spent = sum(t["amount"] for t in mt if t["category"] == cat)
-            pct   = min(spent / limit, 1.0) if limit > 0 else 0
-            color = "#E07A7A" if pct > 0.85 else "#F5C242" if pct > 0.6 else "#7DC99A"
-
-            c = card_frame(self.budget_body, padx=16, pady=10)
-            c.pack(fill="x", pady=4)
-            top = tk.Frame(c, bg=WHITE)
-            top.pack(fill="x")
-            tk.Label(top, text=cat, font=FNT_B, bg=WHITE, fg=TEXT).pack(side="left")
-            tk.Label(top, text=f"${spent:.2f} / ${limit:.2f}",
-                     font=FNT, bg=WHITE, fg=SUBTEXT).pack(side="right")
-
-            bar_bg = tk.Frame(c, bg="#F0E0E8", height=14)
-            bar_bg.pack(fill="x", pady=(6,2))
+        mt = [t for t in self.app.data["transactions"]
+              if datetime.fromisoformat(t["date"]).month==now.month and
+              datetime.fromisoformat(t["date"]).year==now.year and t["type"]=="expense"]
+        for cat,limit in budgets.items():
+            spent = sum(t["amount"] for t in mt if t["category"]==cat)
+            pct   = min(spent/limit,1.0) if limit>0 else 0
+            bar_c = "#E07A7A" if pct>0.85 else "#F5C242" if pct>0.6 else "#7DC99A"
+            c = tk.Frame(self.body,bg=T["WHITE"],highlightbackground=T["BORDER"],
+                         highlightthickness=1,padx=16,pady=10)
+            c.pack(fill="x",pady=4)
+            top = tk.Frame(c,bg=T["WHITE"]); top.pack(fill="x")
+            tk.Label(top,text=cat,font=FNT_B,bg=T["WHITE"],fg=T["TEXT"]).pack(side="left")
+            tk.Label(top,text=f"${spent:.2f} / ${limit:.2f}",font=FNT,
+                     bg=T["WHITE"],fg=T["SUBTEXT"]).pack(side="right")
+            bar_bg = tk.Frame(c,bg=T["BORDER"],height=14)
+            bar_bg.pack(fill="x",pady=(6,2))
             bar_bg.update_idletasks()
-            w = int(bar_bg.winfo_width() * pct)
-            tk.Frame(bar_bg, bg=color, height=14, width=max(w,4)).place(x=0, y=0)
+            tk.Frame(bar_bg,bg=bar_c,height=14,width=max(int(bar_bg.winfo_width()*pct),4)
+                     ).place(x=0,y=0)
+            tk.Button(c,text="✕ Abandon Ship",font=FNT_S,bg=T["WHITE"],fg=T["SUBTEXT"],
+                      bd=0,cursor="hand2",command=lambda k=cat:self._rm(k)).pack(anchor="e")
 
-            del_btn = tk.Button(c, text="✕ Remove", font=FNT_S,
-                                bg=WHITE, fg=SUBTEXT, bd=0, cursor="hand2",
-                                command=lambda k=cat: self._remove(k))
-            del_btn.pack(anchor="e")
-
-    def _remove(self, cat):
-        del self.app.data["budgets"][cat]
-        save_data(self.app.data)
-        self.refresh()
+    def _rm(self,cat):
+        del self.app.data["budgets"][cat]; save_data(self.app.data); self.refresh()
 
 
 # ══════════════════════════════════════════════════════════════════
 class SavingsFrame(tk.Frame):
     def __init__(self, parent, app):
-        super().__init__(parent, bg=BG)
-        self.app = app
-        self._build()
+        super().__init__(parent, bg=T["BG"])
+        self.app = app; self._build()
 
     def _build(self):
-        tk.Label(self, text="🌟 Savings Goals", font=FNT_TITLE,
-                 bg=BG, fg=TEXT).pack(pady=(18,4))
-
-        form = card_frame(self, padx=22, pady=14)
-        form.pack(fill="x", padx=28, pady=(0,10))
-        r1 = tk.Frame(form, bg=WHITE)
-        r1.pack(fill="x", pady=3)
-        tk.Label(r1, text="Goal name:", font=FNT, bg=WHITE, fg=TEXT,
-                 width=12, anchor="w").pack(side="left")
-        self.gname_var = tk.StringVar()
-        tk.Entry(r1, textvariable=self.gname_var, font=FNT, width=22,
-                 bg=BG, fg=TEXT, relief="flat",
-                 highlightbackground=BORDER, highlightthickness=1).pack(side="left", padx=6)
-        tk.Label(r1, text="Target: $", font=FNT, bg=WHITE, fg=TEXT).pack(side="left", padx=(14,0))
-        self.gtarget_var = tk.StringVar()
-        tk.Entry(r1, textvariable=self.gtarget_var, font=FNT, width=10,
-                 bg=BG, fg=TEXT, relief="flat",
-                 highlightbackground=BORDER, highlightthickness=1).pack(side="left", padx=4)
-
-        r2 = tk.Frame(form, bg=WHITE)
-        r2.pack(fill="x", pady=3)
-        tk.Label(r2, text="Saved so far: $", font=FNT, bg=WHITE, fg=TEXT,
-                 width=14, anchor="w").pack(side="left")
-        self.gsaved_var = tk.StringVar(value="0")
-        tk.Entry(r2, textvariable=self.gsaved_var, font=FNT, width=10,
-                 bg=BG, fg=TEXT, relief="flat",
-                 highlightbackground=BORDER, highlightthickness=1).pack(side="left", padx=6)
-        tk.Label(r2, text="Emoji:", font=FNT, bg=WHITE, fg=TEXT).pack(side="left", padx=(14,0))
-        self.gemoji_var = tk.StringVar(value="🎯")
-        ttk.Combobox(r2, textvariable=self.gemoji_var,
+        tk.Label(self,text="🌟 Future Rich Girl Plans",font=FNT_TITLE,
+                 bg=T["BG"],fg=T["TEXT"]).pack(pady=(18,4))
+        form = tk.Frame(self,bg=T["WHITE"],highlightbackground=T["BORDER"],
+                        highlightthickness=1,padx=22,pady=14)
+        form.pack(fill="x",padx=28,pady=(0,10))
+        r1=tk.Frame(form,bg=T["WHITE"]); r1.pack(fill="x",pady=3)
+        tk.Label(r1,text="What are we saving for, queen:",font=FNT,
+                 bg=T["WHITE"],fg=T["TEXT"]).pack(side="left")
+        self.gname=tk.StringVar()
+        tk.Entry(r1,textvariable=self.gname,font=FNT,width=20,bg=T["BG"],fg=T["TEXT"],
+                 relief="flat",highlightbackground=T["BORDER"],highlightthickness=1
+                 ).pack(side="left",padx=6)
+        tk.Label(r1,text="How much it'll cost us: $",font=FNT,
+                 bg=T["WHITE"],fg=T["TEXT"]).pack(side="left",padx=(10,0))
+        self.gtarget=tk.StringVar()
+        tk.Entry(r1,textvariable=self.gtarget,font=FNT,width=10,bg=T["BG"],fg=T["TEXT"],
+                 relief="flat",highlightbackground=T["BORDER"],highlightthickness=1
+                 ).pack(side="left",padx=4)
+        r2=tk.Frame(form,bg=T["WHITE"]); r2.pack(fill="x",pady=3)
+        tk.Label(r2,text="What we've managed so far: $",font=FNT,
+                 bg=T["WHITE"],fg=T["TEXT"]).pack(side="left")
+        self.gsaved=tk.StringVar(value="0")
+        tk.Entry(r2,textvariable=self.gsaved,font=FNT,width=10,bg=T["BG"],fg=T["TEXT"],
+                 relief="flat",highlightbackground=T["BORDER"],highlightthickness=1
+                 ).pack(side="left",padx=6)
+        tk.Label(r2,text="Emoji:",font=FNT,bg=T["WHITE"],fg=T["TEXT"]).pack(side="left",padx=(14,0))
+        self.gemoji=tk.StringVar(value="🎯")
+        ttk.Combobox(r2,textvariable=self.gemoji,
                      values=["🎯","✈️","🏠","🚗","💍","👗","💻","📱","🌴","🐾"],
-                     font=FNT, width=6, state="readonly").pack(side="left", padx=4)
+                     font=FNT,width=6,state="readonly").pack(side="left",padx=4)
+        btn(form,"＋ Manifest It 💅",self._add).pack(pady=(10,0))
+        self.goals_body=tk.Frame(self,bg=T["BG"])
+        self.goals_body.pack(fill="both",expand=True,padx=28,pady=8)
 
-        styled_btn(form, "＋ Add Goal", self._add_goal).pack(pady=(10,0))
+    def retheme(self):
+        self.configure(bg=T["BG"])
+        for w in self.winfo_children(): w.destroy()
+        self._build(); self.refresh()
 
-        self.goals_body = tk.Frame(self, bg=BG)
-        self.goals_body.pack(fill="both", expand=True, padx=28, pady=8)
-
-    def _add_goal(self):
-        name = self.gname_var.get().strip()
+    def _add(self):
+        name=self.gname.get().strip()
         if not name:
-            messagebox.showerror("Oops!", "Give your goal a name! 🌸"); return
-        try:
-            target = float(self.gtarget_var.get())
-            saved  = float(self.gsaved_var.get())
-        except ValueError:
-            messagebox.showerror("Oops!", "Enter valid amounts 💕"); return
-        goal = {"name": name, "target": target,
-                "saved": saved, "emoji": self.gemoji_var.get()}
-        self.app.data["savings_goals"].append(goal)
+            messagebox.showerror("Girl...","Your goal needs a name, queen! 👑"); return
+        try: target=float(self.gtarget.get()); saved=float(self.gsaved.get())
+        except: messagebox.showerror("Girl...","Those aren't numbers, bestie 😭"); return
+        self.app.data["savings_goals"].append(
+            {"name":name,"target":target,"saved":saved,"emoji":self.gemoji.get()})
         save_data(self.app.data)
-        self.gname_var.set("")
-        self.gtarget_var.set("")
-        self.gsaved_var.set("0")
-        self.refresh()
+        self.gname.set(""); self.gtarget.set(""); self.gsaved.set("0"); self.refresh()
 
     def refresh(self):
-        for w in self.goals_body.winfo_children():
-            w.destroy()
-        goals = self.app.data.get("savings_goals", [])
+        for w in self.goals_body.winfo_children(): w.destroy()
+        self.goals_body.configure(bg=T["BG"])
+        goals=self.app.data.get("savings_goals",[])
         if not goals:
-            tk.Label(self.goals_body,
-                     text="No savings goals yet 🌸 Add one above!",
-                     font=FNT, bg=BG, fg=SUBTEXT).pack(pady=20); return
+            tk.Label(self.goals_body,text="No goals yet?? Girl, DREAM BIGGER. Add one above 💅",
+                     font=FNT,bg=T["BG"],fg=T["SUBTEXT"]).pack(pady=20); return
+        for i,g in enumerate(goals):
+            pct=min(g["saved"]/g["target"],1.0) if g["target"]>0 else 0
+            c=tk.Frame(self.goals_body,bg=T["WHITE"],highlightbackground=T["BORDER"],
+                       highlightthickness=1,padx=18,pady=12)
+            c.pack(fill="x",pady=5)
+            top=tk.Frame(c,bg=T["WHITE"]); top.pack(fill="x")
+            tk.Label(top,text=f"{g['emoji']} {g['name']}",font=FNT_B,
+                     bg=T["WHITE"],fg=T["TEXT"]).pack(side="left")
+            done = "DONE! Treat yourself (responsibly) 🎉" if pct>=1 else f"{pct*100:.0f}% there 💪"
+            tk.Label(top,text=done,font=FNT,bg=T["WHITE"],fg=T["SUBTEXT"]).pack(side="right")
+            bar=tk.Frame(c,bg=T["BORDER"],height=18); bar.pack(fill="x",pady=(6,4))
+            bar.update_idletasks()
+            tk.Frame(bar,bg=T["GOLD"],height=18,width=max(int(bar.winfo_width()*pct),4)
+                     ).place(x=0,y=0)
+            tk.Label(c,text=f"${g['saved']:,.2f} saved of ${g['target']:,.2f} — you got this 💖",
+                     font=FNT_S,bg=T["WHITE"],fg=T["SUBTEXT"]).pack(anchor="w")
+            br=tk.Frame(c,bg=T["WHITE"]); br.pack(anchor="e")
+            tk.Button(br,text="＋ I Saved Money! 🎉",command=lambda idx=i:self._add_to(idx),
+                      font=FNT_S,bg=T["ACCENT2"],fg=T["TEXT"],bd=0,padx=10,pady=5,
+                      cursor="hand2",relief="flat").pack(side="left",padx=4)
+            tk.Button(br,text="✕",font=FNT_S,bg=T["WHITE"],fg=T["SUBTEXT"],bd=0,
+                      cursor="hand2",command=lambda idx=i:self._rm(idx)).pack(side="left")
 
-        for i, g in enumerate(goals):
-            pct   = min(g["saved"] / g["target"], 1.0) if g["target"] > 0 else 0
-            c = card_frame(self.goals_body, padx=18, pady=12)
-            c.pack(fill="x", pady=5)
-            top = tk.Frame(c, bg=WHITE)
-            top.pack(fill="x")
-            tk.Label(top, text=f"{g['emoji']} {g['name']}", font=FNT_B,
-                     bg=WHITE, fg=TEXT).pack(side="left")
-            tk.Label(top, text=f"{pct*100:.0f}% complete",
-                     font=FNT, bg=WHITE, fg=SUBTEXT).pack(side="right")
-
-            bar_bg = tk.Frame(c, bg="#F0E0E8", height=18)
-            bar_bg.pack(fill="x", pady=(6,4))
-            bar_bg.update_idletasks()
-            bar_w = bar_bg.winfo_width()
-            fill_w = max(int(bar_w * pct), 4)
-            tk.Frame(bar_bg, bg=GOLD, height=18, width=fill_w).place(x=0, y=0)
-
-            bot = tk.Frame(c, bg=WHITE)
-            bot.pack(fill="x")
-            tk.Label(bot, text=f"${g['saved']:,.2f} saved of ${g['target']:,.2f}",
-                     font=FNT_S, bg=WHITE, fg=SUBTEXT).pack(side="left")
-
-            btn_row = tk.Frame(c, bg=WHITE)
-            btn_row.pack(anchor="e")
-            styled_btn(btn_row, "＋ Add Savings",
-                       lambda idx=i: self._add_to_goal(idx),
-                       color=ACCENT2, fg=TEXT).pack(side="left", padx=4)
-            tk.Button(btn_row, text="✕", font=FNT_S,
-                      bg=WHITE, fg=SUBTEXT, bd=0, cursor="hand2",
-                      command=lambda idx=i: self._remove_goal(idx)).pack(side="left")
-
-    def _add_to_goal(self, idx):
-        val = tk.simpledialog.askfloat("Add Savings",
-                                       "How much did you save? 💰",
-                                       parent=self, minvalue=0)
+    def _add_to(self,idx):
+        val=tk.simpledialog.askfloat("Proud of You! 🎉",
+                                     "How much did you NOT spend?? Proud of you 💰",
+                                     parent=self,minvalue=0)
         if val:
-            self.app.data["savings_goals"][idx]["saved"] += val
-            save_data(self.app.data)
-            self.refresh()
+            self.app.data["savings_goals"][idx]["saved"]+=val
+            save_data(self.app.data); self.refresh()
 
-    def _remove_goal(self, idx):
-        self.app.data["savings_goals"].pop(idx)
-        save_data(self.app.data)
-        self.refresh()
+    def _rm(self,idx):
+        self.app.data["savings_goals"].pop(idx); save_data(self.app.data); self.refresh()
 
 
 # ══════════════════════════════════════════════════════════════════
 class SummaryFrame(tk.Frame):
     def __init__(self, parent, app):
-        super().__init__(parent, bg=BG)
-        self.app = app
-        self._build()
+        super().__init__(parent, bg=T["BG"])
+        self.app = app; self._build()
 
     def _build(self):
-        tk.Label(self, text="📊 Monthly Summary", font=FNT_TITLE,
-                 bg=BG, fg=TEXT).pack(pady=(18,4))
+        tk.Label(self,text="📊 The Hard Truth",font=FNT_TITLE,
+                 bg=T["BG"],fg=T["TEXT"]).pack(pady=(18,4))
+        ctrl=tk.Frame(self,bg=T["BG"]); ctrl.pack()
+        now=datetime.now()
+        self.month_var=tk.IntVar(value=now.month)
+        self.year_var=tk.IntVar(value=now.year)
+        tk.Label(ctrl,text="Which month are we grieving:",font=FNT,
+                 bg=T["BG"],fg=T["TEXT"]).pack(side="left")
+        ttk.Combobox(ctrl,textvariable=self.month_var,values=list(range(1,13)),
+                     width=5,state="readonly").pack(side="left",padx=4)
+        tk.Label(ctrl,text="Year:",font=FNT,bg=T["BG"],
+                 fg=T["TEXT"]).pack(side="left",padx=(10,0))
+        ttk.Combobox(ctrl,textvariable=self.year_var,
+                     values=list(range(2020,now.year+2)),width=7,
+                     state="readonly").pack(side="left",padx=4)
+        btn(ctrl,"🔍 Show Me the Damage",self.refresh).pack(side="left",padx=10)
+        self.chart_area=tk.Frame(self,bg=T["BG"])
+        self.chart_area.pack(fill="both",expand=True,padx=20,pady=8)
 
-        ctrl = tk.Frame(self, bg=BG)
-        ctrl.pack()
-        now = datetime.now()
-        self.month_var = tk.IntVar(value=now.month)
-        self.year_var  = tk.IntVar(value=now.year)
-        tk.Label(ctrl, text="Month:", font=FNT, bg=BG, fg=TEXT).pack(side="left")
-        ttk.Combobox(ctrl, textvariable=self.month_var,
-                     values=list(range(1,13)), width=5,
-                     state="readonly").pack(side="left", padx=4)
-        tk.Label(ctrl, text="Year:", font=FNT, bg=BG, fg=TEXT).pack(side="left", padx=(10,0))
-        ttk.Combobox(ctrl, textvariable=self.year_var,
-                     values=list(range(2020, now.year+2)), width=7,
-                     state="readonly").pack(side="left", padx=4)
-        styled_btn(ctrl, "🔍 View", self.refresh).pack(side="left", padx=10)
-
-        self.chart_area = tk.Frame(self, bg=BG)
-        self.chart_area.pack(fill="both", expand=True, padx=20, pady=8)
+    def retheme(self):
+        self.configure(bg=T["BG"])
+        for w in self.winfo_children(): w.destroy()
+        self._build(); self.refresh()
 
     def refresh(self):
-        for w in self.chart_area.winfo_children():
-            w.destroy()
+        for w in self.chart_area.winfo_children(): w.destroy()
+        self.chart_area.configure(bg=T["BG"])
+        month=self.month_var.get(); year=self.year_var.get()
+        txns=self.app.data["transactions"]
+        mt=[t for t in txns if datetime.fromisoformat(t["date"]).month==month
+            and datetime.fromisoformat(t["date"]).year==year]
+        income =sum(t["amount"] for t in mt if t["type"]=="income")
+        expense=sum(t["amount"] for t in mt if t["type"]=="expense")
 
-        month = self.month_var.get()
-        year  = self.year_var.get()
-        txns  = self.app.data["transactions"]
-        mt    = [t for t in txns
-                 if datetime.fromisoformat(t["date"]).month == month
-                 and datetime.fromisoformat(t["date"]).year == year]
+        row=tk.Frame(self.chart_area,bg=T["BG"]); row.pack(fill="x",pady=(0,10))
+        for title,val,col in [("Money In 🙏",income,"#7DC99A"),
+                               ("Money Gone 💀",expense,"#E07A7A"),
+                               ("What's Left 😬",income-expense,T["ACCENT"])]:
+            c=tk.Frame(row,bg=T["WHITE"],highlightbackground=T["BORDER"],
+                       highlightthickness=1,padx=16,pady=10)
+            c.pack(side="left",expand=True,fill="both",padx=6)
+            tk.Label(c,text=title,font=FNT,bg=T["WHITE"],fg=T["SUBTEXT"]).pack()
+            tk.Label(c,text=f"${val:,.2f}",font=FNT_BIG,bg=T["WHITE"],fg=col).pack()
 
-        income  = sum(t["amount"] for t in mt if t["type"] == "income")
-        expense = sum(t["amount"] for t in mt if t["type"] == "expense")
-
-        # Totals
-        row = tk.Frame(self.chart_area, bg=BG)
-        row.pack(fill="x", pady=(0,10))
-        for title, val, col in [("Total Income", income,"#7DC99A"),
-                                 ("Total Expenses", expense,"#E07A7A"),
-                                 ("Net Savings", income-expense, ACCENT)]:
-            c = card_frame(row, padx=16, pady=10)
-            c.pack(side="left", expand=True, fill="both", padx=6)
-            tk.Label(c, text=title, font=FNT, bg=WHITE, fg=SUBTEXT).pack()
-            tk.Label(c, text=f"${val:,.2f}", font=FNT_BIG, bg=WHITE, fg=col).pack()
-
-        # Charts
-        exp_by_cat = {}
+        exp_by_cat={}
         for t in mt:
-            if t["type"] == "expense":
-                exp_by_cat[t["category"]] = exp_by_cat.get(t["category"],0) + t["amount"]
+            if t["type"]=="expense":
+                exp_by_cat[t["category"]]=exp_by_cat.get(t["category"],0)+t["amount"]
 
-        pastel_colors = ["#FFB3C6","#FFDDC1","#C1F0C8","#C1D4F0",
-                         "#E8C1F0","#F0E8C1","#C1EEF0","#F0C1C1",
-                         "#D4F0C1","#F0D4C1","#C8C1F0","#F0C1E8"]
-
-        fig = Figure(figsize=(9, 3.4), facecolor=BG)
-
-        # Pie chart
-        ax1 = fig.add_subplot(121)
+        fig=Figure(figsize=(9,3.4),facecolor=T["BG"])
+        ax1=fig.add_subplot(121)
         if exp_by_cat:
-            labels = list(exp_by_cat.keys())
-            vals   = list(exp_by_cat.values())
-            ax1.pie(vals, labels=None, colors=pastel_colors[:len(vals)],
-                    autopct="%1.0f%%", startangle=140,
-                    wedgeprops={"edgecolor":"white","linewidth":2},
-                    textprops={"fontsize":8, "color":TEXT})
-            ax1.legend(labels, loc="lower center", bbox_to_anchor=(0.5,-0.3),
-                       fontsize=7, ncol=2,
-                       frameon=False)
-            ax1.set_title("Spending by Category", color=TEXT, fontsize=11, pad=10)
+            labels=list(exp_by_cat.keys()); vals=list(exp_by_cat.values())
+            ax1.pie(vals,labels=None,colors=T["CHART"][:len(vals)],autopct="%1.0f%%",
+                    startangle=140,wedgeprops={"edgecolor":"white","linewidth":2},
+                    textprops={"fontsize":8,"color":T["TEXT"]})
+            ax1.legend(labels,loc="lower center",bbox_to_anchor=(0.5,-0.35),
+                       fontsize=7,ncol=2,frameon=False,labelcolor=T["TEXT"])
+            ax1.set_title("Crimes by Category 💀",color=T["TEXT"],fontsize=11,pad=10)
+            ax1.set_facecolor(T["BG"])
         else:
-            ax1.text(0.5,0.5,"No expenses this month 🌸",
-                     ha="center",va="center",color=SUBTEXT,fontsize=10)
+            ax1.text(0.5,0.5,"No expenses?! Are you okay?? 🌸",
+                     ha="center",va="center",color=T["SUBTEXT"],fontsize=10)
             ax1.axis("off")
 
-        # Bar chart – income vs expense per day
-        ax2 = fig.add_subplot(122)
-        days_e = {}
-        days_i = {}
+        ax2=fig.add_subplot(122)
+        days_e={}; days_i={}
         for t in mt:
-            d = datetime.fromisoformat(t["date"]).day
-            if t["type"] == "expense":
-                days_e[d] = days_e.get(d,0) + t["amount"]
-            else:
-                days_i[d] = days_i.get(d,0) + t["amount"]
+            d=datetime.fromisoformat(t["date"]).day
+            if t["type"]=="expense": days_e[d]=days_e.get(d,0)+t["amount"]
+            else:                    days_i[d]=days_i.get(d,0)+t["amount"]
         if days_e or days_i:
-            all_days = sorted(set(list(days_e.keys())+list(days_i.keys())))
-            ie = [days_e.get(d,0) for d in all_days]
-            ii = [days_i.get(d,0) for d in all_days]
-            x  = range(len(all_days))
-            ax2.bar(x, ie, color=ACCENT2, label="Expense", width=0.5)
-            ax2.bar(x, ii, color="#A8D8A8", label="Income",
-                    width=0.3, alpha=0.8)
+            all_days=sorted(set(list(days_e)+list(days_i)))
+            x=range(len(all_days))
+            ax2.bar(x,[days_e.get(d,0) for d in all_days],color=T["ACCENT2"],
+                    label="Crimes",width=0.5)
+            ax2.bar(x,[days_i.get(d,0) for d in all_days],color="#A8D8A8",
+                    label="Money In 🙏",width=0.3,alpha=0.8)
             ax2.set_xticks(list(x))
-            ax2.set_xticklabels([str(d) for d in all_days], fontsize=7, color=TEXT)
-            ax2.set_facecolor(BG)
-            ax2.tick_params(axis="y", labelcolor=TEXT, labelsize=7)
-            ax2.spines[:].set_edgecolor(BORDER)
-            ax2.legend(fontsize=7, frameon=False, labelcolor=TEXT)
-            ax2.set_title("Daily Spending & Income", color=TEXT, fontsize=11)
+            ax2.set_xticklabels([str(d) for d in all_days],fontsize=7,color=T["TEXT"])
+            ax2.set_facecolor(T["BG"])
+            ax2.tick_params(axis="y",labelcolor=T["TEXT"],labelsize=7)
+            ax2.spines[:].set_edgecolor(T["BORDER"])
+            ax2.legend(fontsize=7,frameon=False,labelcolor=T["TEXT"])
+            ax2.set_title("The Daily Damage Report",color=T["TEXT"],fontsize=11)
         else:
-            ax2.text(0.5,0.5,"No data this month 🌸",
-                     ha="center",va="center",color=SUBTEXT,fontsize=10)
+            ax2.text(0.5,0.5,"Nothing here... suspicious 👀",
+                     ha="center",va="center",color=T["SUBTEXT"],fontsize=10)
             ax2.axis("off")
 
         fig.tight_layout(pad=2)
-        canvas = FigureCanvasTkAgg(fig, self.chart_area)
+        canvas=FigureCanvasTkAgg(fig,self.chart_area)
         canvas.draw()
-        canvas.get_tk_widget().pack(fill="both", expand=True)
+        canvas.get_tk_widget().pack(fill="both",expand=True)
 
 
 # ══════════════════════════════════════════════════════════════════
