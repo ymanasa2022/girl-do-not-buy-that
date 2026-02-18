@@ -1,6 +1,7 @@
 import tkinter as tk
+from datetime import datetime
 from tkinter import ttk, messagebox, filedialog
-import json, os, csv
+import json, os, csv, re
 from datetime import datetime
 import matplotlib
 matplotlib.use("TkAgg")
@@ -14,28 +15,28 @@ ICON_PNG   = os.path.join(_DIR, "icon.png")
 
 # ── Theme definitions ─────────────────────────────────────────────
 THEMES = {
-    "💖 Soft Pink": {
+    "💖 Tickle-me-pink": {
         "BG":"#FFF0F5","PANEL":"#FFE4EF","ACCENT":"#FF85A1","ACCENT2":"#FFB3C6",
         "TEXT":"#7D3C5A","SUBTEXT":"#C07A9A","BORDER":"#F7B8D0","WHITE":"#FFFFFF",
         "GREEN":"#C8F0D0","RED":"#FFD6D6","GOLD":"#FFE9A0",
         "CHART":["#FFB3C6","#FFDDC1","#C1F0C8","#C1D4F0","#E8C1F0",
                  "#F0E8C1","#C1EEF0","#F0C1C1","#D4F0C1","#F0C1E8"],
     },
-    "🌸 Hot Pink": {
+    "🌸 Barbie's Dreamhouse": {
         "BG":"#FFF0FA","PANEL":"#FF69B4","ACCENT":"#FF1493","ACCENT2":"#FF69B4",
         "TEXT":"#4A0030","SUBTEXT":"#C2185B","BORDER":"#FF69B4","WHITE":"#FFFFFF",
         "GREEN":"#C8F0D0","RED":"#FFD6D6","GOLD":"#FFE9A0",
         "CHART":["#FF69B4","#FF1493","#FFB3C6","#FF85A1","#FFDDE8",
                  "#FF4081","#F48FB1","#FCE4EC","#FF80AB","#F06292"],
     },
-    "💜 Lavender Dream": {
+    "💜 Lavender Haze": {
         "BG":"#F5F0FF","PANEL":"#E8DAFF","ACCENT":"#9B59B6","ACCENT2":"#C39BD3",
         "TEXT":"#4A235A","SUBTEXT":"#8E44AD","BORDER":"#D2B4DE","WHITE":"#FFFFFF",
         "GREEN":"#D5F5E3","RED":"#FADBD8","GOLD":"#FEF9E7",
         "CHART":["#C39BD3","#A569BD","#D7BDE2","#E8DAFF","#F4ECF7",
                  "#BB8FCE","#8E44AD","#9B59B6","#6C3483","#D2B4DE"],
     },
-    "🌿 Mint Fresh": {
+    "🌿 Minty Fresh": {
         "BG":"#F0FFF8","PANEL":"#CCFCE8","ACCENT":"#00B894","ACCENT2":"#55EFC4",
         "TEXT":"#1B5E3B","SUBTEXT":"#27AE60","BORDER":"#A8E6CF","WHITE":"#FFFFFF",
         "GREEN":"#D5F5E3","RED":"#FADBD8","GOLD":"#FEF9E7",
@@ -43,13 +44,13 @@ THEMES = {
                  "#DCEDC8","#B2DFDB","#80CBC4","#4DB6AC","#26A69A"],
     },
     "🌙 Midnight Glam": {
-        "BG":"#1A1A2E","PANEL":"#16213E","ACCENT":"#E91E8C","ACCENT2":"#FF6B9D",
-        "TEXT":"#F0E6FF","SUBTEXT":"#C084FC","BORDER":"#7C3AED","WHITE":"#2D2D4E",
+        "BG":"#1A1A2E","PANEL":"#16213E","ACCENT":"#2D1B4E","ACCENT2":"#8970A7",
+        "TEXT":"#C084FC","SUBTEXT":"#C084FC","BORDER":"#7C3AED","WHITE":"#2D2D4E",
         "GREEN":"#1A472A","RED":"#4A1020","GOLD":"#3D3000",
         "CHART":["#E91E8C","#FF6B9D","#C084FC","#7C3AED","#F472B6",
-                 "#A855F7","#EC4899","#8B5CF6","#DB2777","#7C3AED"],
+                "#A855F7","#EC4899","#8B5CF6","#DB2777","#7C3AED"],
     },
-    "🍑 Peachy Keen": {
+    "🍑 Peachy Ken": {
         "BG":"#FFF8F0","PANEL":"#FFE5CC","ACCENT":"#FF7043","ACCENT2":"#FFAB91",
         "TEXT":"#4E2012","SUBTEXT":"#BF360C","BORDER":"#FFCCBC","WHITE":"#FFFFFF",
         "GREEN":"#C8F0D0","RED":"#FFD6D6","GOLD":"#FFE9A0",
@@ -63,7 +64,7 @@ THEMES = {
         "CHART":["#9FA8DA","#7986CB","#5C6BC0","#C5CAE9","#E3E8FF",
                  "#B0BEC5","#90CAF9","#80DEEA","#A5D6A7","#F48FB1"],
     },
-    "🌺 Tropical Slay": {
+    "🌺 Tropical Creamsicle": {
         "BG":"#FFFDE7","PANEL":"#FFF9C4","ACCENT":"#F9A825","ACCENT2":"#FFD54F",
         "TEXT":"#4A3000","SUBTEXT":"#F57F17","BORDER":"#FFE082","WHITE":"#FFFFFF",
         "GREEN":"#C8F0D0","RED":"#FFD6D6","GOLD":"#FFF3CD",
@@ -72,7 +73,7 @@ THEMES = {
     },
 }
 
-T = dict(THEMES["💖 Soft Pink"])  # Active theme — mutable, shared by all widgets
+T = dict(THEMES["💖 Tickle-me-pink"])  # Active theme — mutable, shared by all widgets
 
 FNT       = ("Helvetica", 11)
 FNT_B     = ("Helvetica", 12, "bold")
@@ -104,14 +105,18 @@ def map_cat(raw):
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE) as f: return json.load(f)
-    return {"transactions":[],"savings_goals":[],"budgets":{},"theme":"💖 Soft Pink"}
+    return {"transactions":[],"savings_goals":[],"budgets":{},"theme":"💖 Tickle-me-pink"}
 
 def save_data(data):
     with open(DATA_FILE,"w") as f: json.dump(data,f,indent=2)
 
+def strip_emoji(text):
+    """Remove emoji/non-ASCII so matplotlib doesn't warn about missing glyphs."""
+    return re.sub(r'[^\x00-\x7F\u00C0-\u024F\u1E00-\u1EFF]+', '', text).strip()
+
 def btn(parent, text, cmd, color=None, fg=None, **kw):
     bg = color or T["ACCENT"]
-    fg = fg or T["WHITE"]
+    fg = fg or "#4A0030"
     return tk.Button(parent, text=text, command=cmd, font=FNT_B,
                      bg=bg, fg=fg, bd=0, padx=14, pady=7,
                      cursor="hand2", relief="flat",
@@ -123,11 +128,11 @@ def btn(parent, text, cmd, color=None, fg=None, **kw):
 class FinanceApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("🚨 Girl Don't Buy That")
+        self.title("🚨 Girl Don't Buy That 🚨")
         self.geometry("1120x760")
         self.minsize(960,680)
         self.data = load_data()
-        saved = self.data.get("theme","💖 Soft Pink")
+        saved = self.data.get("theme","💖 Tickle-me-pink")
         if saved in THEMES: T.update(THEMES[saved])
         self.configure(bg=T["BG"])
         self._set_icon()
@@ -136,13 +141,11 @@ class FinanceApp(tk.Tk):
         self.show_frame("dashboard")
 
     def _set_icon(self):
-        """Set window icon — works on Windows (.ico) and Mac/Linux (.png)."""
         try:
             if os.name == "nt" and os.path.exists(ICON_ICO):
                 self.iconbitmap(ICON_ICO)
             elif os.path.exists(ICON_PNG):
                 from tkinter import PhotoImage
-                # Use PIL for better PNG support
                 try:
                     from PIL import Image, ImageTk
                     img = Image.open(ICON_PNG).resize((64, 64), Image.LANCZOS)
@@ -152,7 +155,7 @@ class FinanceApp(tk.Tk):
                     ico = PhotoImage(file=ICON_PNG)
                     self.iconphoto(True, ico)
         except Exception:
-            pass  # Icon is cosmetic — never crash over it
+            pass
 
     def _ttk_style(self):
         s = ttk.Style()
@@ -170,19 +173,19 @@ class FinanceApp(tk.Tk):
         self.sb.pack(side="left", fill="y")
         self.sb.pack_propagate(False)
 
-        self.sb_ico  = tk.Label(self.sb, text="🚨", font=("Helvetica",32), bg=T["PANEL"], fg=T["ACCENT"])
+        self.sb_ico = tk.Label(self.sb, text="🚨", font=("Helvetica",32), bg=T["PANEL"], fg=T["ACCENT"])
         self.sb_ico.pack(pady=(20,2))
-        self.sb_ttl  = tk.Label(self.sb, text="Girl Don't\nBuy That 🚨",
+        self.sb_ttl  = tk.Label(self.sb, text="Girl Don't\nBuy That",
                                  font=FNT_B, bg=T["PANEL"], fg=T["TEXT"], justify="center")
         self.sb_ttl.pack()
-        self.sb_div  = tk.Frame(self.sb, bg=T["BORDER"], height=1)
+        self.sb_div = tk.Frame(self.sb, bg=T["BORDER"], height=1)
         self.sb_div.pack(fill="x", padx=18, pady=12)
 
         self.nav = {}
         nav_items = [("🏠  Home Base","dashboard"),("💸  The Damage","transactions"),
                      ("📥  Drop the Receipts","import_csv"),("🗂️  Damage Control","budgets"),
-                     ("🌟  Dream Big Sis","savings"),("📊  The Hard Truth","summary"),
-                     ("🎨  Switch Vibes","themes")]
+                     ("🌟  Dream Big Sis","savings"),("💰  Income Flow","income"),
+                     ("📊  The Hard Truth","summary"),("🎨  Switch Vibes","themes")]
         for label, key in nav_items:
             b = tk.Button(self.sb, text=label, font=FNT, bg=T["PANEL"], fg=T["TEXT"],
                           bd=0, anchor="w", padx=20, pady=10, cursor="hand2",
@@ -197,8 +200,8 @@ class FinanceApp(tk.Tk):
         self.frames = {}
         for name, cls in [("dashboard",DashboardFrame),("transactions",TransactionsFrame),
                            ("import_csv",ImportCSVFrame),("budgets",BudgetsFrame),
-                           ("savings",SavingsFrame),("summary",SummaryFrame),
-                           ("themes",ThemesFrame)]:
+                           ("savings",SavingsFrame),("income",IncomeFrame),
+                           ("summary",SummaryFrame),("themes",ThemesFrame)]:
             f = cls(self.ct, self)
             f.place(relx=0, rely=0, relwidth=1, relheight=1)
             self.frames[name] = f
@@ -223,7 +226,8 @@ class FinanceApp(tk.Tk):
     def show_frame(self, name):
         for k,b in self.nav.items():
             b.configure(bg=T["ACCENT"] if k==name else T["PANEL"],
-                        fg=T["WHITE"]  if k==name else T["TEXT"])
+                        fg="#4A0030"   if k==name else T["TEXT"],
+                        font=FNT_B     if k==name else FNT)
         self.frames[name].tkraise()
         if hasattr(self.frames[name],"refresh"): self.frames[name].refresh()
 
@@ -258,28 +262,25 @@ class ThemesFrame(tk.Frame):
 
     def _populate(self):
         for w in self.grid_f.winfo_children(): w.destroy()
-        current = self.app.data.get("theme","💖 Soft Pink")
+        current = self.app.data.get("theme","💖 Tickle-me-pink")
         col = row = 0
         for name, th in THEMES.items():
             active = (name == current)
-            rim = tk.Frame(self.grid_f,
-                           bg=th["ACCENT"] if active else th["BORDER"],
-                           padx=3, pady=3)
+            rim = tk.Frame(self.grid_f, bg=th["ACCENT"] if active else th["BORDER"], padx=3, pady=3)
             rim.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
             card = tk.Frame(rim, bg=th["BG"], padx=16, pady=14, cursor="hand2")
             card.pack(fill="both", expand=True)
-            # Swatches
             sw = tk.Frame(card, bg=th["BG"])
             sw.pack(pady=(0,6))
             for c in [th["PANEL"],th["ACCENT"],th["ACCENT2"],th["BORDER"]]:
                 tk.Frame(sw, bg=c, width=24, height=24).pack(side="left", padx=2)
             tk.Label(card, text=name, font=FNT_B, bg=th["BG"], fg=th["TEXT"]).pack()
             if active:
-                tk.Label(card, text="✓ Slaying rn", font=FNT_S,
+                tk.Label(card, text="✓ Slay Choice", font=FNT_S,
                          bg=th["BG"], fg=th["ACCENT"]).pack(pady=(4,0))
             else:
                 tk.Button(card, text="Wear This One 💅", font=FNT_S,
-                          bg=th["ACCENT"], fg=th["WHITE"], bd=0, padx=10, pady=5,
+                          bg=th["ACCENT"], fg="#4A0030", bd=0, padx=10, pady=5,
                           cursor="hand2", relief="flat",
                           command=lambda n=name: self.app.apply_theme(n)
                           ).pack(pady=(6,0))
@@ -295,8 +296,8 @@ class DashboardFrame(tk.Frame):
         self.app = app
         self.hdr = tk.Frame(self, bg=T["ACCENT"], pady=16)
         self.hdr.pack(fill="x")
-        self.hdr_l = tk.Label(self.hdr, text="🚨 Girl, Don't Buy That. 🚨",
-                               font=FNT_TITLE, bg=T["ACCENT"], fg=T["WHITE"])
+        self.hdr_l = tk.Label(self.hdr, text="Girl Math Time 🧮",
+                               font=FNT_TITLE, bg=T["ACCENT"], fg="#986F89")
         self.hdr_l.pack()
         self.body = tk.Frame(self, bg=T["BG"])
         self.body.pack(fill="both", expand=True, padx=28, pady=18)
@@ -304,7 +305,7 @@ class DashboardFrame(tk.Frame):
     def retheme(self):
         self.configure(bg=T["BG"])
         self.hdr.configure(bg=T["ACCENT"])
-        self.hdr_l.configure(bg=T["ACCENT"], fg=T["WHITE"])
+        self.hdr_l.configure(bg=T["ACCENT"], fg="#4A0030")
         self.body.configure(bg=T["BG"])
         self.refresh()
 
@@ -332,7 +333,7 @@ class DashboardFrame(tk.Frame):
             tk.Label(c, text=icon, font=("Helvetica",26), bg=T["WHITE"]).pack()
             tk.Label(c, text=title, font=FNT, bg=T["WHITE"], fg=T["SUBTEXT"]).pack()
             tk.Label(c, text=f"${val:,.2f}", font=FNT_BIG, bg=T["WHITE"], fg=color).pack()
-            tk.Label(c, text="this month, bestie", font=FNT_S, bg=T["WHITE"], fg=T["SUBTEXT"]).pack()
+            tk.Label(c, text="this month", font=FNT_S, bg=T["WHITE"], fg=T["SUBTEXT"]).pack()
 
         tk.Label(self.body, text="🕐 Recent Bad Decisions", font=FNT_B,
                  bg=T["BG"], fg=T["TEXT"]).pack(anchor="w", pady=(8,4))
@@ -551,7 +552,7 @@ class ImportCSVFrame(tk.Frame):
 
     def _import_all(self):
         if not self.preview_data:
-            messagebox.showinfo("Babe...","Bestie you need to pick a file first 😭"); return
+            messagebox.showinfo("Babe...","Bestie, you need to pick a file 😭"); return
         existing = {(t["date"][:10],t["note"],t["amount"]) for t in self.app.data["transactions"]}
         added = 0
         for t in self.preview_data:
@@ -653,7 +654,7 @@ class SavingsFrame(tk.Frame):
                         highlightthickness=1,padx=22,pady=14)
         form.pack(fill="x",padx=28,pady=(0,10))
         r1=tk.Frame(form,bg=T["WHITE"]); r1.pack(fill="x",pady=3)
-        tk.Label(r1,text="What are we saving for, queen:",font=FNT,
+        tk.Label(r1,text="What are we saving for queen?:",font=FNT,
                  bg=T["WHITE"],fg=T["TEXT"]).pack(side="left")
         self.gname=tk.StringVar()
         tk.Entry(r1,textvariable=self.gname,font=FNT,width=20,bg=T["BG"],fg=T["TEXT"],
@@ -740,6 +741,170 @@ class SavingsFrame(tk.Frame):
 
 
 # ══════════════════════════════════════════════════════════════════
+class IncomeFrame(tk.Frame):
+    def __init__(self, parent, app):
+        super().__init__(parent, bg=T["BG"])
+        self.app = app
+        self._build()
+
+    def _build(self):
+        tk.Label(self, text="💰 Income Flow", font=FNT_TITLE,
+                 bg=T["BG"], fg=T["TEXT"]).pack(pady=(18,4))
+        tk.Label(self, text="Let's talk about the money coming IN, queen 👑",
+                 font=FNT, bg=T["BG"], fg=T["SUBTEXT"]).pack(pady=(0,10))
+
+        form = tk.Frame(self, bg=T["WHITE"], highlightbackground=T["BORDER"],
+                        highlightthickness=1, padx=22, pady=14)
+        form.pack(fill="x", padx=28, pady=(0,10))
+        tk.Label(form, text="Log Some Income (love that for you) 💸",
+                 font=FNT_B, bg=T["WHITE"], fg=T["TEXT"]).pack(anchor="w", pady=(0,8))
+
+        r1 = tk.Frame(form, bg=T["WHITE"]); r1.pack(fill="x", pady=3)
+        tk.Label(r1, text="Source:", font=FNT, bg=T["WHITE"], fg=T["TEXT"],
+                 width=10, anchor="w").pack(side="left")
+        self.src_var = tk.StringVar(value="💼 Income")
+        income_cats = ["💼 Income","💻 Freelance","🎁 Gift / Transfer",
+                       "📈 Investment","🏦 Refund","💡 Side Hustle","📦 Other Income"]
+        ttk.Combobox(r1, textvariable=self.src_var, values=income_cats,
+                     font=FNT, width=22, state="readonly").pack(side="left", padx=6)
+        tk.Label(r1, text="Amount: $", font=FNT, bg=T["WHITE"],
+                 fg=T["TEXT"]).pack(side="left", padx=(14,0))
+        self.inc_amt = tk.StringVar()
+        tk.Entry(r1, textvariable=self.inc_amt, font=FNT, width=10, bg=T["BG"],
+                 fg=T["TEXT"], relief="flat", highlightbackground=T["BORDER"],
+                 highlightthickness=1).pack(side="left", padx=4)
+
+        r2 = tk.Frame(form, bg=T["WHITE"]); r2.pack(fill="x", pady=3)
+        tk.Label(r2, text="Date:", font=FNT, bg=T["WHITE"], fg=T["TEXT"],
+                 width=10, anchor="w").pack(side="left")
+        self.inc_date = tk.StringVar(value=datetime.now().strftime("%Y-%m-%d"))
+        tk.Entry(r2, textvariable=self.inc_date, font=FNT, width=13, bg=T["BG"],
+                 fg=T["TEXT"], relief="flat", highlightbackground=T["BORDER"],
+                 highlightthickness=1).pack(side="left", padx=6)
+        tk.Label(r2, text="Note:", font=FNT, bg=T["WHITE"],
+                 fg=T["TEXT"]).pack(side="left", padx=(14,0))
+        self.inc_note = tk.StringVar()
+        tk.Entry(r2, textvariable=self.inc_note, font=FNT, width=28, bg=T["BG"],
+                 fg=T["TEXT"], relief="flat", highlightbackground=T["BORDER"],
+                 highlightthickness=1).pack(side="left", padx=6)
+
+        btn(form, "💰 Log That Bag", self._add).pack(pady=(10,0))
+
+        self.stats_row = tk.Frame(self, bg=T["BG"])
+        self.stats_row.pack(fill="x", padx=28, pady=(4,6))
+
+        tk.Label(self, text="📊 Income by Source (this month)",
+                 font=FNT_B, bg=T["BG"], fg=T["TEXT"]).pack(anchor="w", padx=28, pady=(4,2))
+        self.src_row = tk.Frame(self, bg=T["BG"])
+        self.src_row.pack(fill="x", padx=28, pady=(0,6))
+
+        tk.Label(self, text="💸 Income History (slay!)",
+                 font=FNT_B, bg=T["BG"], fg=T["TEXT"]).pack(anchor="w", padx=28, pady=(4,2))
+        wrap = tk.Frame(self, bg=T["BG"])
+        wrap.pack(fill="both", expand=True, padx=28, pady=(0,8))
+        cols = ("Date","Source","Note","Amount")
+        self.tree = ttk.Treeview(wrap, columns=cols, show="headings", style="A.Treeview")
+        for col, w in zip(cols, [110,180,260,110]):
+            self.tree.heading(col, text=col)
+            self.tree.column(col, width=w, anchor="center")
+        sb2 = ttk.Scrollbar(wrap, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=sb2.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        sb2.pack(side="right", fill="y")
+
+    def _add(self):
+        try: amt = float(self.inc_amt.get())
+        except ValueError:
+            messagebox.showerror("Girl...", "That is not a number bestie 💀"); return
+        self.app.data["transactions"].append({
+            "date": self.inc_date.get() + "T00:00:00",
+            "type": "income",
+            "category": self.src_var.get(),
+            "note": self.inc_note.get(),
+            "amount": amt
+        })
+        save_data(self.app.data)
+        self.inc_amt.set(""); self.inc_note.set("")
+        self.refresh()
+
+    def retheme(self):
+        self.configure(bg=T["BG"])
+        for w in self.winfo_children(): w.destroy()
+        self._build(); self.refresh()
+
+    def refresh(self):
+        for w in self.stats_row.winfo_children(): w.destroy()
+        for w in self.src_row.winfo_children(): w.destroy()
+
+        txns = self.app.data["transactions"]
+        income_all = [t for t in txns if t["type"] == "income"]
+        now = datetime.now()
+
+        def month_income(m, y):
+            return sum(t["amount"] for t in income_all
+                       if datetime.fromisoformat(t["date"]).month == m
+                       and datetime.fromisoformat(t["date"]).year == y)
+
+        this_total = month_income(now.month, now.year)
+        pm = now.month - 1 if now.month > 1 else 12
+        py = now.year if now.month > 1 else now.year - 1
+        last_total = month_income(pm, py)
+        all_total  = sum(t["amount"] for t in income_all)
+        diff       = this_total - last_total
+        diff_txt   = (f"up ${diff:,.2f} vs last month!" if diff >= 0
+                      else f"down ${abs(diff):,.2f} vs last month")
+        diff_col   = "#7DC99A" if diff >= 0 else "#E07A7A"
+
+        this_month_inc = [t for t in income_all
+                          if datetime.fromisoformat(t["date"]).month == now.month
+                          and datetime.fromisoformat(t["date"]).year == now.year]
+        by_src = {}
+        for t in this_month_inc:
+            by_src[t["category"]] = by_src.get(t["category"], 0) + t["amount"]
+        top_src = max(by_src, key=by_src.get) if by_src else "Nothing yet"
+
+        for title, val, color, sub, sub_col in [
+                ("This Month 💰",  this_total, "#7DC99A",  diff_txt,  diff_col),
+                ("Last Month",     last_total, T["SUBTEXT"],"keep stacking!", T["SUBTEXT"]),
+                ("All Time 👑",    all_total,  T["ACCENT"], f"Top: {top_src}", T["SUBTEXT"])]:
+            c = tk.Frame(self.stats_row, bg=T["WHITE"], highlightbackground=T["BORDER"],
+                         highlightthickness=1, padx=16, pady=12)
+            c.pack(side="left", expand=True, fill="both", padx=6)
+            tk.Label(c, text=title, font=FNT, bg=T["WHITE"], fg=T["SUBTEXT"]).pack()
+            tk.Label(c, text=f"${val:,.2f}", font=FNT_BIG, bg=T["WHITE"], fg=color).pack()
+            tk.Label(c, text=sub, font=FNT_S, bg=T["WHITE"], fg=sub_col).pack()
+
+        if by_src:
+            max_val = max(by_src.values())
+            for src, amt in sorted(by_src.items(), key=lambda x: x[1], reverse=True):
+                pct = amt / max_val if max_val > 0 else 0
+                row = tk.Frame(self.src_row, bg=T["BG"])
+                row.pack(fill="x", pady=2)
+                tk.Label(row, text=src, font=FNT_S, bg=T["BG"], fg=T["TEXT"],
+                         width=22, anchor="w").pack(side="left")
+                bar_bg = tk.Frame(row, bg=T["BORDER"], height=16)
+                bar_bg.pack(side="left", fill="x", expand=True, padx=(6,8))
+                bar_bg.update_idletasks()
+                fill_w = max(int(bar_bg.winfo_width() * pct), 4)
+                tk.Frame(bar_bg, bg="#7DC99A", height=16, width=fill_w).place(x=0, y=0)
+                tk.Label(row, text=f"${amt:,.2f}", font=FNT_S, bg=T["BG"],
+                         fg=T["TEXT"], width=10, anchor="e").pack(side="left")
+        else:
+            tk.Label(self.src_row,
+                     text="No income this month yet... the bag is incoming though 💅",
+                     font=FNT, bg=T["BG"], fg=T["SUBTEXT"]).pack(anchor="w")
+
+        for row in self.tree.get_children(): self.tree.delete(row)
+        if not income_all:
+            self.tree.insert("","end", values=("—","No income logged yet","Add some above!","—"))
+            return
+        for t in sorted(income_all, key=lambda t: t["date"], reverse=True):
+            self.tree.insert("","end",
+                values=(t["date"][:10], t["category"],
+                        t.get("note",""), f"+${t['amount']:,.2f}"))
+
+
+# ══════════════════════════════════════════════════════════════════
 class SummaryFrame(tk.Frame):
     def __init__(self, parent, app):
         super().__init__(parent, bg=T["BG"])
@@ -754,8 +919,11 @@ class SummaryFrame(tk.Frame):
         self.year_var=tk.IntVar(value=now.year)
         tk.Label(ctrl,text="Which month are we grieving:",font=FNT,
                  bg=T["BG"],fg=T["TEXT"]).pack(side="left")
-        ttk.Combobox(ctrl,textvariable=self.month_var,values=list(range(1,13)),
-                     width=5,state="readonly").pack(side="left",padx=4)
+        MONTHS = ["January","February","March","April","May","June",
+          "July","August","September","October","November","December"]
+        self.month_var = tk.StringVar(value=MONTHS[now.month-1])
+        ttk.Combobox(ctrl,textvariable=self.month_var,values=MONTHS,
+             width=10,state="readonly").pack(side="left",padx=4)
         tk.Label(ctrl,text="Year:",font=FNT,bg=T["BG"],
                  fg=T["TEXT"]).pack(side="left",padx=(10,0))
         ttk.Combobox(ctrl,textvariable=self.year_var,
@@ -773,7 +941,9 @@ class SummaryFrame(tk.Frame):
     def refresh(self):
         for w in self.chart_area.winfo_children(): w.destroy()
         self.chart_area.configure(bg=T["BG"])
-        month=self.month_var.get(); year=self.year_var.get()
+        MONTHS = ["January","February","March","April","May","June",
+          "July","August","September","October","November","December"]
+        month=MONTHS.index(self.month_var.get())+1; year=self.year_var.get()
         txns=self.app.data["transactions"]
         mt=[t for t in txns if datetime.fromisoformat(t["date"]).month==month
             and datetime.fromisoformat(t["date"]).year==year]
@@ -798,16 +968,19 @@ class SummaryFrame(tk.Frame):
         fig=Figure(figsize=(9,3.4),facecolor=T["BG"])
         ax1=fig.add_subplot(121)
         if exp_by_cat:
-            labels=list(exp_by_cat.keys()); vals=list(exp_by_cat.values())
+            labels=list(exp_by_cat.keys())
+            vals=list(exp_by_cat.values())
+            # Strip emojis from labels so matplotlib doesn't warn about missing glyphs
+            clean_labels=[strip_emoji(l) for l in labels]
             ax1.pie(vals,labels=None,colors=T["CHART"][:len(vals)],autopct="%1.0f%%",
                     startangle=140,wedgeprops={"edgecolor":"white","linewidth":2},
                     textprops={"fontsize":8,"color":T["TEXT"]})
-            ax1.legend(labels,loc="lower center",bbox_to_anchor=(0.5,-0.35),
+            ax1.legend(clean_labels,loc="lower center",bbox_to_anchor=(0.5,-0.35),
                        fontsize=7,ncol=2,frameon=False,labelcolor=T["TEXT"])
-            ax1.set_title("Crimes by Category 💀",color=T["TEXT"],fontsize=11,pad=10)
+            ax1.set_title("Crimes by Category",color=T["TEXT"],fontsize=11,pad=10)
             ax1.set_facecolor(T["BG"])
         else:
-            ax1.text(0.5,0.5,"No expenses?! Are you okay?? 🌸",
+            ax1.text(0.5,0.5,"No expenses yet!",
                      ha="center",va="center",color=T["SUBTEXT"],fontsize=10)
             ax1.axis("off")
 
@@ -821,18 +994,18 @@ class SummaryFrame(tk.Frame):
             all_days=sorted(set(list(days_e)+list(days_i)))
             x=range(len(all_days))
             ax2.bar(x,[days_e.get(d,0) for d in all_days],color=T["ACCENT2"],
-                    label="Crimes",width=0.5)
+                    label="Expenses",width=0.5)
             ax2.bar(x,[days_i.get(d,0) for d in all_days],color="#A8D8A8",
-                    label="Money In 🙏",width=0.3,alpha=0.8)
+                    label="Money In",width=0.3,alpha=0.8)
             ax2.set_xticks(list(x))
             ax2.set_xticklabels([str(d) for d in all_days],fontsize=7,color=T["TEXT"])
             ax2.set_facecolor(T["BG"])
             ax2.tick_params(axis="y",labelcolor=T["TEXT"],labelsize=7)
             ax2.spines[:].set_edgecolor(T["BORDER"])
             ax2.legend(fontsize=7,frameon=False,labelcolor=T["TEXT"])
-            ax2.set_title("The Daily Damage Report",color=T["TEXT"],fontsize=11)
+            ax2.set_title("Daily Damage Report",color=T["TEXT"],fontsize=11)
         else:
-            ax2.text(0.5,0.5,"Nothing here... suspicious 👀",
+            ax2.text(0.5,0.5,"Nothing here yet...",
                      ha="center",va="center",color=T["SUBTEXT"],fontsize=10)
             ax2.axis("off")
 
