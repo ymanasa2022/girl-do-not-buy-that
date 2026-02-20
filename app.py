@@ -92,6 +92,7 @@ CATEGORIES = ["🛍️ Shopping","🍔 Restaurants","🫑 Grocery","💅 Self-ca
 # All keys must be LOWERCASE — map_cat lowercases the raw value before matching
 APPLE_MAP = {
     "restaurants":    "🍔 Restaurants",
+    "restaurant":    "🍔 Restaurants",
     "groceries":      "🫑 Grocery",
     "grocery":        "🫑 Grocery",
     "shopping":       "🛍️ Shopping",
@@ -99,11 +100,13 @@ APPLE_MAP = {
     "travel":         "✈️ Travel",
     "transportation": "🚗 Transport",
     "transport":      "🚗 Transport",
+    "gas":      "🚗 Transport",
     "health":         "🏥 Medical",
     "medical":        "🏥 Medical",
     "parking":        "🅿️ Parking",
     "utilities":      "💡 Utilities",
     "subscriptions":  "🔂 Subscriptions",
+    "subscription":  "🔂 Subscriptions",
     "self care":      "💅 Self-care",
     "personal care":  "💅 Self-care",
     "gifts":          "🎁 Gifts",
@@ -910,28 +913,44 @@ class ImportCSVFrame(tk.Frame):
                 inner.bind("<Configure>", lambda e, c=canvas_w:
                            c.configure(scrollregion=c.bbox("all")))
 
+                # Column headers
+                hdr_row = tk.Frame(inner, bg=T["PANEL"], padx=10, pady=5)
+                hdr_row.pack(fill="x")
+                for htext, w in [("Date",11),("Type",9),("Amount",11),
+                                  ("Merchant / Note",32),("CSV Category",22),("  ",3),("Assign To",22)]:
+                    tk.Label(hdr_row, text=htext, font=FNT_S, bg=T["PANEL"],
+                             fg=T["SUBTEXT"], width=w, anchor="w").pack(side="left", padx=4)
+
                 for idx, (txn_i, t) in enumerate(other_txns):
                     var = tk.StringVar(value="📦 Other")
                     self._cat_vars[txn_i] = var
-                    row_f = tk.Frame(inner,
-                                     bg=T["WHITE"] if idx % 2 == 0 else T["PANEL"],
-                                     padx=10, pady=6)
+                    row_bg = T["WHITE"] if idx % 2 == 0 else T["BG"]
+                    row_f = tk.Frame(inner, bg=row_bg, padx=10, pady=7)
                     row_f.pack(fill="x")
                     # Date
                     tk.Label(row_f, text=t["date"][:10], font=FNT_S,
-                             bg=row_f["bg"], fg=T["SUBTEXT"], width=10).pack(side="left")
+                             bg=row_bg, fg=T["SUBTEXT"], width=11, anchor="w").pack(side="left")
+                    # Type badge
+                    type_col = "#7DC99A" if t["type"]=="income" else "#E07A7A"
+                    sign = "+" if t["type"]=="income" else "-"
+                    tk.Label(row_f, text=t["type"].capitalize(), font=FNT_S,
+                             bg=type_col, fg="#FFFFFF", padx=5, pady=1, width=7).pack(side="left", padx=4)
+                    # Amount
+                    tk.Label(row_f, text=f"{sign}${t['amount']:.2f}", font=FNT_B,
+                             bg=row_bg, fg=T["TEXT"], width=11, anchor="w").pack(side="left", padx=4)
                     # Merchant/note
-                    note_txt = (t.get("note") or "—")[:28]
+                    note_txt = (t.get("note") or "—")[:32]
                     tk.Label(row_f, text=note_txt, font=FNT_S,
-                             bg=row_f["bg"], fg=T["TEXT"], width=28, anchor="w").pack(side="left", padx=6)
+                             bg=row_bg, fg=T["TEXT"], width=32, anchor="w").pack(side="left", padx=4)
                     # Raw CSV category
-                    raw_lbl = (t.get("_raw_cat") or "—")[:20]
-                    tk.Label(row_f, text=f'csv: "{raw_lbl}"', font=FNT_S,
-                             bg=row_f["bg"], fg="#E07A7A", width=20, anchor="w").pack(side="left", padx=4)
+                    raw_lbl = (t.get("_raw_cat") or "unrecognised")[:20]
+                    tk.Label(row_f, text=f'"{raw_lbl}"', font=FNT_S,
+                             bg=row_bg, fg="#E07A7A", width=22, anchor="w").pack(side="left", padx=4)
                     tk.Label(row_f, text="→", font=FNT_S,
-                             bg=row_f["bg"], fg=T["SUBTEXT"]).pack(side="left", padx=4)
+                             bg=row_bg, fg=T["SUBTEXT"]).pack(side="left", padx=2)
+                    # Category picker
                     cb = ttk.Combobox(row_f, textvariable=var,
-                                      values=CATEGORIES, width=20,
+                                      values=CATEGORIES, width=22,
                                       state="readonly", font=FNT_S)
                     cb.pack(side="left", padx=4)
                     var.trace_add("write", lambda *_, ti=txn_i, v=var: self._remap_cat_by_idx(ti, v.get()))
@@ -945,14 +964,21 @@ class ImportCSVFrame(tk.Frame):
 
     def _remap_cat_by_idx(self, txn_idx, new_cat):
         """Live-update a single transaction by its index in preview_data."""
-        if txn_idx < len(self.preview_data):
-            self.preview_data[txn_idx]["category"] = new_cat
-        # Update corresponding tree row
-        iids = self.tree.get_children()
-        if txn_idx < len(iids):
-            vals = list(self.tree.item(iids[txn_idx], "values"))
-            vals[2] = new_cat
-            self.tree.item(iids[txn_idx], values=vals)
+        if txn_idx >= len(self.preview_data):
+            return
+        self.preview_data[txn_idx]["category"] = new_cat
+        # Match tree row by date + note + amount rather than by position
+        t = self.preview_data[txn_idx]
+        target_date = t["date"][:10]
+        target_note = t.get("note", "")
+        target_amt  = ("+" if t["type"]=="income" else "-") + f"${t['amount']:.2f}"
+        for iid in self.tree.get_children():
+            vals = list(self.tree.item(iid, "values"))
+            # tree cols: Date, Type, Category, Note, Amount
+            if vals[0] == target_date and vals[3] == target_note and vals[4] == target_amt:
+                vals[2] = new_cat
+                self.tree.item(iid, values=vals)
+                break
 
     def _import_all(self):
         if not self.preview_data:
@@ -967,7 +993,7 @@ class ImportCSVFrame(tk.Frame):
         save_data(self.app.data)
         self.status.configure(
             text=f"🎉 Imported {added} transactions. No judgment. Okay a LITTLE judgment. ({len(self.preview_data)-added} dupes skipped 🙏)",
-            fg=T["ACCENT2"])
+            fg=T["ACCENT"])
         messagebox.showinfo("Okay... 😤",f"Imported {added} transactions. We're gonna be okay 🌸")
 
     def refresh(self): pass
