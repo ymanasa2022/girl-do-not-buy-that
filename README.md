@@ -91,6 +91,7 @@ Transaction Date  •  Description  •  Merchant  •  Category  •  Type  •
 - `Type = Debit` → logged as **income** (cash back)
 - ACH bank transfers (payments to the card) are **automatically skipped**
 
+You can upload other bank CSVs but you might need to manually edit categories and purchases.
 ---
 
 ## 🛍️ Categories
