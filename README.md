@@ -18,21 +18,15 @@ Run the app.
 
 Dependencies required: python3, matplotlib, python-tk.
 
-If on Mac, 
+If on Mac: 
+```brew install python
 
-Go to https://www.python.org/downloads/macos/
+brew install pipx
 
-Download: 
+brew install python-tk
 
-Python 3.13.12 - Feb. 3, 2026
-
-  _**Download macOS installer**_
-  
-Double click on the downloaded package to install python3. 
-
-```pip install matplotlib```
-
-```pip install tk```
+brew install python-matplotlib
+```
 
 ## ✨ Features
 
