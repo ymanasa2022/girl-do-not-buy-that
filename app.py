@@ -77,11 +77,11 @@ THEMES = {
 
 T = dict(THEMES["💖 Tickle-me-pink"])
 
-FNT       = ("Helvetica", 11)
-FNT_B     = ("Helvetica", 12, "bold")
-FNT_TITLE = ("Helvetica", 18, "bold")
-FNT_S     = ("Helvetica", 9)
-FNT_BIG   = ("Helvetica", 22, "bold")
+FNT       = ("Helvetica", 12)
+FNT_B     = ("Helvetica", 14, "bold")
+FNT_TITLE = ("Helvetica", 20, "bold")
+FNT_S     = ("Helvetica", 13)
+FNT_BIG   = ("Helvetica", 24, "bold")
 
 DATA_FILE = os.path.join(os.path.expanduser("~"), "girl_do_not_buy_that_data.json")
 
@@ -1407,7 +1407,7 @@ class SummaryFrame(tk.Frame):
                     startangle=140,wedgeprops={"edgecolor":"white","linewidth":2},
                     textprops={"fontsize":8,"color":T["TEXT"]})
             ax1.legend(clean_labels,loc="lower center",bbox_to_anchor=(0.5,-0.35),
-                       fontsize=7,ncol=2,frameon=False,labelcolor=T["TEXT"])
+                       fontsize=10,ncol=2,frameon=False,labelcolor=T["TEXT"])
             ax1.set_title("Crimes by Category",color=T["TEXT"],fontsize=11,pad=10)
             ax1.set_facecolor(T["BG"])
         else:
