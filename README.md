@@ -17,15 +17,22 @@ Run the app.
 ```python app.py```
 
 Dependencies required: python3, matplotlib, python-tk.
-If on Mac, 
-Go to https://www.python.org/downloads/macos/
-Download: 
-Python 3.13.12 - Feb. 3, 2026
-  _**Download macOS installer**_
-Double click on the downloaded package to install python3. 
-```pip install matplotlib```
-```pip install tk```
 
+If on Mac, 
+
+Go to https://www.python.org/downloads/macos/
+
+Download: 
+
+Python 3.13.12 - Feb. 3, 2026
+
+  _**Download macOS installer**_
+  
+Double click on the downloaded package to install python3. 
+
+```pip install matplotlib```
+
+```pip install tk```
 
 ## ✨ Features
 
