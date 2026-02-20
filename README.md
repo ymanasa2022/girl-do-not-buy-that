@@ -3,6 +3,14 @@
 A sassy personal finance tracker for people who need their money app to match their energy. Built with Python + tkinter. No subscriptions, no ads, no judgment (okay, a little judgment).
 
 ---
+## Downloading App
+Enter the following command into your terminal to download the app.
+```git clone https://github.com/ymanasa2022/girl-do-not-buy-that.git```
+Go into the the newly created directory. 
+```cd girl-do-not-buy-that```
+Run the app. 
+```python app.py```
+Dependencies required: python3 and matplotlib.
 
 ## ✨ Features
 
