@@ -30,6 +30,26 @@ brew install python-tk
 
 brew install python-matplotlib
 ```
+---
+
+## 📥 CSV Import
+
+Supports **Apple Card** CSV exports out of the box.
+
+Expected columns:
+```
+Transaction Date  •  Description  •  Merchant  •  Category  •  Type  •  Amount
+```
+
+**Apple Card behavior:**
+- `Type = Payment` → logged as an **expense**
+- `Type = Debit` → logged as **income** (cash back)
+- ACH bank transfers (payments to the card) are **automatically skipped**
+
+You can upload other bank CSVs but you might be prompted to manually edit categories and purchases.
+Please google how to download CSV of transactions for your respective bank. 
+
+---
 
 ## ✨ Features
 
@@ -75,24 +95,7 @@ brew install python-matplotlib
 ### Date Range
 Toggle between **Single Month** and **Date Range** mode to aggregate charts across multiple months or an entire year.
 
----
-
-## 📥 CSV Import
-
-Supports **Apple Card** CSV exports out of the box.
-
-Expected columns:
-```
-Transaction Date  •  Description  •  Merchant  •  Category  •  Type  •  Amount
-```
-
-**Apple Card behavior:**
-- `Type = Payment` → logged as an **expense**
-- `Type = Debit` → logged as **income** (cash back)
-- ACH bank transfers (payments to the card) are **automatically skipped**
-
-You can upload other bank CSVs but you might need to manually edit categories and purchases.
----
+---- 
 
 ## 🛍️ Categories
 
