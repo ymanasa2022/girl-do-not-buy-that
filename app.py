@@ -384,7 +384,7 @@ class DashboardFrame(tk.Frame):
         row = tk.Frame(self.body, bg=T["BG"])
         row.pack(fill="x", pady=(0,14))
         for title, val, color, icon in [
-                ("What's Left 😬", income-expense, T["ACCENT2"],"💰"),
+                ("What's Left 😬", income-expense, T["ACCENT"],"💰"),
                 ("Money In 🙏",    income,          "#7DC99A", "📈"),
                 ("Crimes 💀",      expense,         "#E07A7A", "📉")]:
             c = tk.Frame(row, bg=T["WHITE"], highlightbackground=T["BORDER"],
@@ -827,7 +827,7 @@ class ImportCSVFrame(tk.Frame):
         save_data(self.app.data)
         self.status.configure(
             text=f"🎉 Imported {added} transactions. No judgment. Okay a LITTLE judgment. ({len(self.preview_data)-added} dupes skipped 🙏)",
-            fg=T["ACCENT2"])
+            fg=T["ACCENT"])
         messagebox.showinfo("Okay... 😤",f"Imported {added} transactions. We're gonna be okay 🌸")
 
     def refresh(self): pass
@@ -1133,7 +1133,7 @@ class IncomeFrame(tk.Frame):
         self.src_row = tk.Frame(self, bg=T["BG"])
         self.src_row.pack(fill="x", padx=28, pady=(0,6))
 
-        tk.Label(self, text="💸 Slay Income History",
+        tk.Label(self, text="💸 Income History (slay!)",
                  font=FNT_B, bg=T["BG"], fg=T["TEXT"]).pack(anchor="w", padx=28, pady=(4,2))
         wrap = tk.Frame(self, bg=T["BG"])
         wrap.pack(fill="both", expand=True, padx=28, pady=(0,8))
@@ -1248,22 +1248,62 @@ class SummaryFrame(tk.Frame):
     def _build(self):
         tk.Label(self,text="📊 The Hard Truth",font=FNT_TITLE,
                  bg=T["BG"],fg=T["TEXT"]).pack(pady=(18,4))
-        ctrl=tk.Frame(self,bg=T["BG"]); ctrl.pack()
         now=datetime.now()
+        years = list(range(2020, now.year+2))
+
+        # ── Range mode toggle ─────────────────────────────────────
+        mode_f = tk.Frame(self, bg=T["BG"]); mode_f.pack()
+        self.range_mode = tk.StringVar(value="single")
+        tk.Radiobutton(mode_f, text="Single Month", variable=self.range_mode, value="single",
+                       font=FNT, bg=T["BG"], fg=T["TEXT"], selectcolor=T["ACCENT2"],
+                       activebackground=T["BG"], command=self._toggle_mode).pack(side="left", padx=8)
+        tk.Radiobutton(mode_f, text="Date Range", variable=self.range_mode, value="range",
+                       font=FNT, bg=T["BG"], fg=T["TEXT"], selectcolor=T["ACCENT2"],
+                       activebackground=T["BG"], command=self._toggle_mode).pack(side="left", padx=8)
+
+        # ── Single month controls ─────────────────────────────────
+        self.single_f = tk.Frame(self, bg=T["BG"]); self.single_f.pack(pady=(4,0))
         self.month_var = tk.StringVar(value=MONTHS[now.month-1])
         self.year_var  = tk.IntVar(value=now.year)
-        tk.Label(ctrl,text="Which month are we grieving:",font=FNT,
-                 bg=T["BG"],fg=T["TEXT"]).pack(side="left")
-        ttk.Combobox(ctrl,textvariable=self.month_var,values=MONTHS,
+        tk.Label(self.single_f,text="Month:",font=FNT,bg=T["BG"],fg=T["TEXT"]).pack(side="left")
+        ttk.Combobox(self.single_f,textvariable=self.month_var,values=MONTHS,
                      width=10,state="readonly").pack(side="left",padx=4)
-        tk.Label(ctrl,text="Year:",font=FNT,bg=T["BG"],
-                 fg=T["TEXT"]).pack(side="left",padx=(10,0))
-        ttk.Combobox(ctrl,textvariable=self.year_var,
-                     values=list(range(2020,now.year+2)),width=7,
-                     state="readonly").pack(side="left",padx=4)
-        btn(ctrl,"🔍 Show Me the Damage",self.refresh).pack(side="left",padx=10)
+        tk.Label(self.single_f,text="Year:",font=FNT,bg=T["BG"],fg=T["TEXT"]).pack(side="left",padx=(10,0))
+        ttk.Combobox(self.single_f,textvariable=self.year_var,
+                     values=years,width=7,state="readonly").pack(side="left",padx=4)
+
+        # ── Range controls (hidden by default) ───────────────────
+        self.range_f = tk.Frame(self, bg=T["BG"])
+        # from
+        tk.Label(self.range_f,text="From:",font=FNT,bg=T["BG"],fg=T["TEXT"]).pack(side="left")
+        self.from_month = tk.StringVar(value=MONTHS[0])
+        self.from_year  = tk.IntVar(value=now.year)
+        ttk.Combobox(self.range_f,textvariable=self.from_month,values=MONTHS,
+                     width=10,state="readonly").pack(side="left",padx=4)
+        ttk.Combobox(self.range_f,textvariable=self.from_year,
+                     values=years,width=7,state="readonly").pack(side="left",padx=2)
+        # to
+        tk.Label(self.range_f,text="  To:",font=FNT,bg=T["BG"],fg=T["TEXT"]).pack(side="left")
+        self.to_month = tk.StringVar(value=MONTHS[now.month-1])
+        self.to_year  = tk.IntVar(value=now.year)
+        ttk.Combobox(self.range_f,textvariable=self.to_month,values=MONTHS,
+                     width=10,state="readonly").pack(side="left",padx=4)
+        ttk.Combobox(self.range_f,textvariable=self.to_year,
+                     values=years,width=7,state="readonly").pack(side="left",padx=2)
+
+        # shared go button
+        ctrl2 = tk.Frame(self, bg=T["BG"]); ctrl2.pack(pady=4)
+        btn(ctrl2,"🔍 Show Me the Damage",self.refresh).pack()
         self.chart_area=tk.Frame(self,bg=T["BG"])
         self.chart_area.pack(fill="both",expand=True,padx=20,pady=8)
+
+    def _toggle_mode(self):
+        if self.range_mode.get() == "single":
+            self.range_f.pack_forget()
+            self.single_f.pack(pady=(4,0))
+        else:
+            self.single_f.pack_forget()
+            self.range_f.pack(pady=(4,0))
 
     def retheme(self):
         self.configure(bg=T["BG"])
@@ -1273,18 +1313,39 @@ class SummaryFrame(tk.Frame):
     def refresh(self):
         for w in self.chart_area.winfo_children(): w.destroy()
         self.chart_area.configure(bg=T["BG"])
-        month = MONTHS.index(self.month_var.get()) + 1
-        year  = self.year_var.get()
         txns=self.app.data["transactions"]
-        mt=[t for t in txns if datetime.fromisoformat(t["date"]).month==month
-            and datetime.fromisoformat(t["date"]).year==year]
+
+        # ── Determine date range ──────────────────────────────────
+        if self.range_mode.get() == "single":
+            month = MONTHS.index(self.month_var.get()) + 1
+            year  = self.year_var.get()
+            mt = [t for t in txns if datetime.fromisoformat(t["date"]).month==month
+                  and datetime.fromisoformat(t["date"]).year==year]
+            range_label = f"{self.month_var.get()} {year}"
+            # for pie click navigation
+            self._current_month = month
+            self._current_year  = year
+        else:
+            fm = MONTHS.index(self.from_month.get()) + 1
+            fy = self.from_year.get()
+            tm = MONTHS.index(self.to_month.get()) + 1
+            ty = self.to_year.get()
+            from_dt = datetime(fy, fm, 1)
+            to_dt   = datetime(ty, tm, 1)
+            if from_dt > to_dt: from_dt, to_dt = to_dt, from_dt
+            mt = [t for t in txns if from_dt <= datetime.fromisoformat(t["date"]).replace(day=1) <= to_dt]
+            range_label = f"{self.from_month.get()} {fy} – {self.to_month.get()} {ty}"
+            self._current_month = None  # range mode, no single month for filter
+            self._current_year  = None
+
         income =sum(t["amount"] for t in mt if t["type"]=="income")
         expense=sum(t["amount"] for t in mt if t["type"]=="expense")
 
         row=tk.Frame(self.chart_area,bg=T["BG"]); row.pack(fill="x",pady=(0,10))
+        tk.Label(row, text=range_label, font=FNT_B, bg=T["BG"], fg=T["SUBTEXT"]).pack(side="left", padx=6)
         for title,val,col in [("Money In 🙏",income,"#7DC99A"),
                                ("Money Gone 💀",expense,"#E07A7A"),
-                               ("What's Left 😬",income-expense,T["ACCENT2"])]:
+                               ("What's Left 😬",income-expense,T["ACCENT"])]:
             c=tk.Frame(row,bg=T["WHITE"],highlightbackground=T["BORDER"],
                        highlightthickness=1,padx=16,pady=10)
             c.pack(side="left",expand=True,fill="both",padx=6)
@@ -1351,6 +1412,85 @@ class SummaryFrame(tk.Frame):
         canvas=FigureCanvasTkAgg(fig,self.chart_area)
         canvas.draw()
         canvas.get_tk_widget().pack(fill="both",expand=True)
+
+        # ── Hover tooltip ─────────────────────────────────────────
+        tooltip = tk.Label(self.chart_area, text="", font=FNT_S,
+                           bg="#2D2D2D", fg="white", padx=8, pady=4,
+                           relief="flat", bd=0)
+
+        # Build day->transactions lookup for bar chart
+        day_txns = {}
+        for t in mt:
+            d = datetime.fromisoformat(t["date"]).day
+            day_txns.setdefault(d, []).append(t)
+
+        wedges = [c for c in ax1.get_children()
+                  if hasattr(c, "get_path") and hasattr(c, "get_facecolor")
+                  and c.__class__.__name__ == "FancyArrow" or
+                  c.__class__.__name__ == "Wedge"]
+        # get actual wedges from pie
+        pie_wedges = [c for c in ax1.get_children() if c.__class__.__name__ == "Wedge"]
+
+        def on_hover(event):
+            tooltip.place_forget()
+            if event.inaxes is None:
+                return
+            # ── Pie chart hover ───────────────────────────────────
+            if event.inaxes == ax1 and exp_by_cat:
+                for i, wedge in enumerate(pie_wedges):
+                    if wedge.contains_point([event.x, event.y]):
+                        cat   = labels[i]
+                        amt   = vals[i]
+                        total = sum(vals)
+                        pct   = amt / total * 100 if total else 0
+                        tip_text = cat + "\n$" + f"{amt:,.2f}" + f"  ({pct:.1f}%)"
+                        tooltip.configure(text=tip_text)
+                        x = int(event.x) + 12
+                        y = int(canvas.get_tk_widget().winfo_height() - event.y) + 12
+                        tooltip.place(x=x, y=y)
+                        return
+            # ── Bar chart hover ───────────────────────────────────
+            if event.inaxes == ax2 and (days_e or days_i):
+                # find nearest bar by x position
+                if ax2.patches:
+                    for bar in ax2.patches:
+                        if bar.get_x() <= event.xdata <= bar.get_x() + bar.get_width():
+                            bar_idx = round(bar.get_x() + bar.get_width() / 2 - 0.1)
+                            if 0 <= bar_idx < len(all_days):
+                                day = all_days[bar_idx]
+                                txns_day = day_txns.get(day, [])
+                                if not txns_day:
+                                    return
+                                lines = [f"── Day {day} ──"]
+                                for t in sorted(txns_day, key=lambda t: t["amount"], reverse=True)[:8]:
+                                    sign = "+" if t["type"] == "income" else "-"
+                                    note = t.get("note","") or strip_emoji(t["category"])
+                                    note = note[:22] + "…" if len(note) > 22 else note
+                                    lines.append(f"{sign}${t['amount']:.2f}  {note}")
+                                if len(txns_day) > 8:
+                                    lines.append(f"…+{len(txns_day)-8} more")
+                                tooltip.configure(text="\n".join(lines))
+                                x = int(event.x) + 12
+                                y = int(canvas.get_tk_widget().winfo_height() - event.y) + 12
+                                tooltip.place(x=x, y=y)
+                                return
+            tooltip.place_forget()
+
+        canvas.mpl_connect("motion_notify_event", on_hover)
+
+        # ── Pie click → navigate to Damage tab filtered by category ──
+        def on_click(event):
+            if event.inaxes != ax1 or not exp_by_cat: return
+            for i, wedge in enumerate(pie_wedges):
+                if wedge.contains_point([event.x, event.y]):
+                    cat = labels[i]
+                    # Set filter on TransactionsFrame
+                    txn_frame = self.app.frames["transactions"]
+                    txn_frame.filter_cat.set(cat)
+                    # If single month, also set a month label in title area
+                    self.app.show_frame("transactions")
+                    return
+        canvas.mpl_connect("button_press_event", on_click)
 
 
 # ══════════════════════════════════════════════════════════════════
