@@ -387,7 +387,7 @@ class DashboardFrame(tk.Frame):
         row = tk.Frame(self.body, bg=T["BG"])
         row.pack(fill="x", pady=(0,14))
         for title, val, color, icon in [
-                ("What's Left 😬", income-expense, T["ACCENT"],"💰"),
+                ("What's Left 😬", income-expense, T["ACCENT2"],"💰"),
                 ("Money In 🙏",    income,          "#7DC99A", "📈"),
                 ("Crimes 💀",      expense,         "#E07A7A", "📉")]:
             c = tk.Frame(row, bg=T["WHITE"], highlightbackground=T["BORDER"],
@@ -967,7 +967,7 @@ class ImportCSVFrame(tk.Frame):
         save_data(self.app.data)
         self.status.configure(
             text=f"🎉 Imported {added} transactions. No judgment. Okay a LITTLE judgment. ({len(self.preview_data)-added} dupes skipped 🙏)",
-            fg=T["ACCENT"])
+            fg=T["ACCENT2"])
         messagebox.showinfo("Okay... 😤",f"Imported {added} transactions. We're gonna be okay 🌸")
 
     def refresh(self): pass
@@ -1485,7 +1485,7 @@ class SummaryFrame(tk.Frame):
         tk.Label(row, text=range_label, font=FNT_B, bg=T["BG"], fg=T["SUBTEXT"]).pack(side="left", padx=6)
         for title,val,col in [("Money In 🙏",income,"#7DC99A"),
                                ("Money Gone 💀",expense,"#E07A7A"),
-                               ("What's Left 😬",income-expense,T["ACCENT"])]:
+                               ("What's Left 😬",income-expense,T["ACCENT2"])]:
             c=tk.Frame(row,bg=T["WHITE"],highlightbackground=T["BORDER"],
                        highlightthickness=1,padx=16,pady=10)
             c.pack(side="left",expand=True,fill="both",padx=6)
