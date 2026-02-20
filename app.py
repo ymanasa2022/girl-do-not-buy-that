@@ -830,19 +830,83 @@ class BudgetsFrame(tk.Frame):
         if not budgets:
             tk.Label(self.body,text="No budgets set... which honestly explains a lot 👀",
                      font=FNT,bg=T["BG"],fg=T["SUBTEXT"]).pack(pady=20); return
+
+        # ── Month/year picker ─────────────────────────────────────
+        ctrl = tk.Frame(self.body, bg=T["BG"]); ctrl.pack(fill="x", pady=(0,10))
+        tk.Label(ctrl, text="Viewing:", font=FNT, bg=T["BG"], fg=T["TEXT"]).pack(side="left")
         now = datetime.now()
+        if not hasattr(self, "_bmonth_var"):
+            self._bmonth_var = tk.StringVar(value=MONTHS[now.month-1])
+            self._byear_var  = tk.IntVar(value=now.year)
+        ttk.Combobox(ctrl, textvariable=self._bmonth_var, values=MONTHS,
+                     width=11, state="readonly", font=FNT).pack(side="left", padx=6)
+        ttk.Combobox(ctrl, textvariable=self._byear_var,
+                     values=list(range(2020, now.year+2)),
+                     width=7, state="readonly", font=FNT).pack(side="left", padx=4)
+        btn(ctrl, "Go 🔍", self.refresh, color=T["PANEL"], fg=T["TEXT"]).pack(side="left", padx=8)
+
+        month = MONTHS.index(self._bmonth_var.get()) + 1
+        year  = self._byear_var.get()
+        is_current = (month == now.month and year == now.year)
+
         mt = [t for t in self.app.data["transactions"]
-              if datetime.fromisoformat(t["date"]).month==now.month and
-              datetime.fromisoformat(t["date"]).year==now.year and t["type"]=="expense"]
+              if datetime.fromisoformat(t["date"]).month==month and
+              datetime.fromisoformat(t["date"]).year==year and t["type"]=="expense"]
+
+        # ── Budget history: show past months as a summary row ─────
+        # Collect all months that have transaction data
+        all_months = sorted({
+            (datetime.fromisoformat(t["date"]).year, datetime.fromisoformat(t["date"]).month)
+            for t in self.app.data["transactions"] if t["type"]=="expense"
+        }, reverse=True)
+
+        if len(all_months) > 1:
+            hist_frame = tk.Frame(self.body, bg=T["WHITE"], highlightbackground=T["BORDER"],
+                                  highlightthickness=1, padx=14, pady=10)
+            hist_frame.pack(fill="x", pady=(0,10))
+            tk.Label(hist_frame, text="📅 Budget History", font=FNT_B,
+                     bg=T["WHITE"], fg=T["TEXT"]).pack(anchor="w", pady=(0,6))
+            scroll_f = tk.Frame(hist_frame, bg=T["WHITE"])
+            scroll_f.pack(fill="x")
+            for ym in all_months[:12]:  # show last 12 months
+                y, m = ym
+                mmt = [t for t in self.app.data["transactions"]
+                       if datetime.fromisoformat(t["date"]).month==m and
+                       datetime.fromisoformat(t["date"]).year==y and t["type"]=="expense"]
+                passed = sum(1 for cat,lim in budgets.items()
+                             if sum(t["amount"] for t in mmt if t["category"]==cat) <= lim)
+                total  = len(budgets)
+                all_pass = passed == total
+                is_sel = (m == month and y == year)
+                bg_c = T["ACCENT"] if is_sel else (T["GREEN"] if all_pass else T["RED"])
+                mon_str = MONTHS[m-1][:3] + " " + str(y)[2:]
+                status_str = "OK" if all_pass else (str(passed)+"/"+str(total))
+                lbl = mon_str + "\n" + status_str
+                tk.Button(scroll_f,
+                          text=lbl,
+                          font=FNT_S, bg=bg_c, fg=T["TEXT"], bd=0, padx=8, pady=6,
+                          cursor="hand2", relief="flat",
+                          command=lambda mo=m,yo=y: self._jump_to(mo,yo)
+                          ).pack(side="left", padx=3, pady=2)
+
+        # ── Current month detail ──────────────────────────────────
+        month_label = f"{MONTHS[month-1]} {year}"
+        tk.Label(self.body, text=f"{'📍 This Month' if is_current else f'📆 {month_label}'}",
+                 font=FNT_B, bg=T["BG"], fg=T["TEXT"]).pack(anchor="w", pady=(4,4))
+
         for cat,limit in budgets.items():
             spent = sum(t["amount"] for t in mt if t["category"]==cat)
             pct   = min(spent/limit,1.0) if limit>0 else 0
+            passed = spent <= limit
             bar_c = "#E07A7A" if pct>0.85 else "#F5C242" if pct>0.6 else "#7DC99A"
             c = tk.Frame(self.body,bg=T["WHITE"],highlightbackground=T["BORDER"],
                          highlightthickness=1,padx=16,pady=10)
             c.pack(fill="x",pady=4)
             top = tk.Frame(c,bg=T["WHITE"]); top.pack(fill="x")
+            status = "✅ Under budget!" if passed else "❌ Over budget 💀"
+            status_col = "#7DC99A" if passed else "#E07A7A"
             tk.Label(top,text=cat,font=FNT_B,bg=T["WHITE"],fg=T["TEXT"]).pack(side="left")
+            tk.Label(top,text=status,font=FNT_S,bg=T["WHITE"],fg=status_col).pack(side="left",padx=10)
             tk.Label(top,text=f"${spent:.2f} / ${limit:.2f}",font=FNT,
                      bg=T["WHITE"],fg=T["SUBTEXT"]).pack(side="right")
             bar_bg = tk.Frame(c,bg=T["BORDER"],height=14)
@@ -850,8 +914,14 @@ class BudgetsFrame(tk.Frame):
             bar_bg.update_idletasks()
             tk.Frame(bar_bg,bg=bar_c,height=14,width=max(int(bar_bg.winfo_width()*pct),4)
                      ).place(x=0,y=0)
-            tk.Button(c,text="✕ Abandon Ship",font=FNT_S,bg=T["WHITE"],fg=T["SUBTEXT"],
-                      bd=0,cursor="hand2",command=lambda k=cat:self._rm(k)).pack(anchor="e")
+            if is_current:
+                tk.Button(c,text="✕ Abandon Ship",font=FNT_S,bg=T["WHITE"],fg=T["SUBTEXT"],
+                          bd=0,cursor="hand2",command=lambda k=cat:self._rm(k)).pack(anchor="e")
+
+    def _jump_to(self, month, year):
+        self._bmonth_var.set(MONTHS[month-1])
+        self._byear_var.set(year)
+        self.refresh()
 
     def _rm(self,cat):
         del self.app.data["budgets"][cat]; save_data(self.app.data); self.refresh()
