@@ -993,7 +993,7 @@ class ImportCSVFrame(tk.Frame):
         save_data(self.app.data)
         self.status.configure(
             text=f"🎉 Imported {added} transactions. No judgment. Okay a LITTLE judgment. ({len(self.preview_data)-added} dupes skipped 🙏)",
-            fg=T["ACCENT"])
+            fg=T["ACCENT2"])
         messagebox.showinfo("Okay... 😤",f"Imported {added} transactions. We're gonna be okay 🌸")
 
     def refresh(self): pass
