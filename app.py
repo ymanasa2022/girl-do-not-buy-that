@@ -488,35 +488,15 @@ class TransactionsFrame(tk.Frame):
                  bg=T["BG"], fg=T["TEXT"]).pack(side="left")
         tk.Label(flt, text="  Double-click to edit ✏️", font=FNT_S,
                  bg=T["BG"], fg=T["SUBTEXT"]).pack(side="left")
+        # Category filter on the right
         btn(flt, "☑ Select All",   self._select_all,   color=T["PANEL"], fg=T["TEXT"]).pack(side="right", padx=4)
         btn(flt, "☐ Deselect All", self._deselect_all, color=T["PANEL"], fg=T["TEXT"]).pack(side="right", padx=4)
-
-        # Category filter
         self.filter_cat = tk.StringVar(value="All")
         ttk.Combobox(flt, textvariable=self.filter_cat,
                      values=["All"] + CATEGORIES,
-                     width=16, state="readonly", font=FNT_S).pack(side="right", padx=4)
-        tk.Label(flt, text="Cat:", font=FNT_S, bg=T["BG"], fg=T["SUBTEXT"]).pack(side="right")
+                     width=18, state="readonly", font=FNT_S).pack(side="right", padx=4)
+        tk.Label(flt, text="Filter:", font=FNT_S, bg=T["BG"], fg=T["SUBTEXT"]).pack(side="right")
         self.filter_cat.trace_add("write", lambda *_: self.refresh())
-
-        # ── Date filter row ───────────────────────────────────────
-        now = datetime.now()
-        dflt = tk.Frame(self, bg=T["BG"])
-        dflt.pack(fill="x", padx=28, pady=(0,2))
-        tk.Label(dflt, text="Month:", font=FNT_S, bg=T["BG"], fg=T["SUBTEXT"]).pack(side="left")
-        self.filter_month = tk.StringVar(value="All")
-        ttk.Combobox(dflt, textvariable=self.filter_month,
-                     values=["All"] + MONTHS,
-                     width=11, state="readonly", font=FNT_S).pack(side="left", padx=4)
-        tk.Label(dflt, text="Year:", font=FNT_S, bg=T["BG"], fg=T["SUBTEXT"]).pack(side="left", padx=(8,0))
-        self.filter_year = tk.StringVar(value="All")
-        ttk.Combobox(dflt, textvariable=self.filter_year,
-                     values=["All"] + [str(y) for y in range(2020, now.year+2)],
-                     width=7, state="readonly", font=FNT_S).pack(side="left", padx=4)
-        btn(dflt, "✕ Clear Filters", self._clear_filters,
-            color=T["PANEL"], fg=T["SUBTEXT"]).pack(side="left", padx=8)
-        self.filter_month.trace_add("write", lambda *_: self.refresh())
-        self.filter_year.trace_add("write", lambda *_: self.refresh())
 
         self.wrap = tk.Frame(self, bg=T["BG"])
         self.wrap.pack(fill="both", expand=True, padx=28, pady=(2,0))
@@ -634,11 +614,6 @@ class TransactionsFrame(tk.Frame):
             self._refresh_row(iid)
         self._update_sel_label()
 
-    def _clear_filters(self):
-        self.filter_cat.set("All")
-        self.filter_month.set("All")
-        self.filter_year.set("All")
-
     def _update_sel_label(self):
         n = sum(1 for v in self._checked.values() if v)
         self.sel_label.configure(text=f"{n} selected")
@@ -669,17 +644,10 @@ class TransactionsFrame(tk.Frame):
     def refresh(self):
         self._checked.clear()
         for row in self.tree.get_children(): self.tree.delete(row)
-        cat_filter   = self.filter_cat.get()   if hasattr(self, "filter_cat")   else "All"
-        month_filter = self.filter_month.get() if hasattr(self, "filter_month") else "All"
-        year_filter  = self.filter_year.get()  if hasattr(self, "filter_year")  else "All"
+        cat_filter = self.filter_cat.get() if hasattr(self, "filter_cat") else "All"
         txns = sorted(self.app.data["transactions"], key=lambda t:t["date"], reverse=True)
         if cat_filter != "All":
             txns = [t for t in txns if t["category"] == cat_filter]
-        if month_filter != "All":
-            m = MONTHS.index(month_filter) + 1
-            txns = [t for t in txns if datetime.fromisoformat(t["date"]).month == m]
-        if year_filter != "All":
-            txns = [t for t in txns if datetime.fromisoformat(t["date"]).year == int(year_filter)]
         for t in txns:
             sign = "+" if t["type"]=="income" else "-"
             iid = self.tree.insert("","end", values=(
