@@ -103,7 +103,7 @@ APPLE_MAP = {
     "medical":        "🏥 Medical",
     "parking":        "🅿️ Parking",
     "utilities":      "💡 Utilities",
-    "subscription":  "🔂 Subscriptions",
+    "subscriptions":  "🔂 Subscriptions",
     "self care":      "💅 Self-care",
     "personal care":  "💅 Self-care",
     "gifts":          "🎁 Gifts",
@@ -317,8 +317,8 @@ class DashboardFrame(tk.Frame):
         self.app = app
         self.hdr = tk.Frame(self, bg=T["ACCENT"], pady=16)
         self.hdr.pack(fill="x")
-        self.hdr_l = tk.Label(self.hdr, text="Girl Math Time!!",
-                               font=FNT_TITLE, bg=T["ACCENT"], fg=T["ACCENT2"])
+        self.hdr_l = tk.Label(self.hdr, text="Girl Math Time 🧮",
+                               font=FNT_TITLE, bg=T["ACCENT"], fg="#986F89")
         self.hdr_l.pack()
         self.body = tk.Frame(self, bg=T["BG"])
         self.body.pack(fill="both", expand=True, padx=28, pady=18)
@@ -326,7 +326,7 @@ class DashboardFrame(tk.Frame):
     def retheme(self):
         self.configure(bg=T["BG"])
         self.hdr.configure(bg=T["ACCENT"])
-        self.hdr_l.configure(bg=T["ACCENT"], fg=T["ACCENT2"])
+        self.hdr_l.configure(bg=T["ACCENT"], fg="#4A0030")
         self.body.configure(bg=T["BG"])
         self.refresh()
 
@@ -342,6 +342,26 @@ class DashboardFrame(tk.Frame):
         income  = sum(t["amount"] for t in mt if t["type"]=="income")
         expense = sum(t["amount"] for t in mt if t["type"]=="expense")
 
+        # All-time net worth
+        total_in  = sum(t["amount"] for t in txns if t["type"]=="income")
+        total_out = sum(t["amount"] for t in txns if t["type"]=="expense")
+        net_worth = total_in - total_out
+        nw_color  = "#7DC99A" if net_worth >= 0 else "#E07A7A"
+
+        # ── Net worth banner ──────────────────────────────────────
+        nw = tk.Frame(self.body, bg=T["WHITE"], highlightbackground=T["BORDER"],
+                      highlightthickness=1, padx=18, pady=12)
+        nw.pack(fill="x", pady=(0,10))
+        left = tk.Frame(nw, bg=T["WHITE"]); left.pack(side="left", expand=True)
+        tk.Label(left, text="💎 Total Net Worth", font=FNT_B, bg=T["WHITE"], fg=T["SUBTEXT"]).pack(anchor="w")
+        tk.Label(left, text=f"${net_worth:,.2f}", font=FNT_BIG, bg=T["WHITE"], fg=nw_color).pack(anchor="w")
+        # mini breakdown on the right
+        right = tk.Frame(nw, bg=T["WHITE"]); right.pack(side="right", padx=20)
+        tk.Label(right, text=f"all-time in:   +${total_in:,.2f}",  font=FNT_S, bg=T["WHITE"], fg="#7DC99A", anchor="e").pack(anchor="e")
+        tk.Label(right, text=f"all-time out:  -${total_out:,.2f}", font=FNT_S, bg=T["WHITE"], fg="#E07A7A", anchor="e").pack(anchor="e")
+        tk.Label(right, text=f"{len(txns)} transactions tracked", font=FNT_S, bg=T["WHITE"], fg=T["SUBTEXT"], anchor="e").pack(anchor="e", pady=(4,0))
+
+        # ── This month cards ──────────────────────────────────────
         row = tk.Frame(self.body, bg=T["BG"])
         row.pack(fill="x", pady=(0,14))
         for title, val, color, icon in [
@@ -1084,7 +1104,7 @@ class IncomeFrame(tk.Frame):
         self.src_row = tk.Frame(self, bg=T["BG"])
         self.src_row.pack(fill="x", padx=28, pady=(0,6))
 
-        tk.Label(self, text="💸 Slay Income History",
+        tk.Label(self, text="💸 Income History (slay!)",
                  font=FNT_B, bg=T["BG"], fg=T["TEXT"]).pack(anchor="w", padx=28, pady=(4,2))
         wrap = tk.Frame(self, bg=T["BG"])
         wrap.pack(fill="both", expand=True, padx=28, pady=(0,8))
@@ -1253,9 +1273,7 @@ class SummaryFrame(tk.Frame):
             labels=list(exp_by_cat.keys())
             vals=list(exp_by_cat.values())
             clean_labels=[strip_emoji(l) for l in labels]
-            DISTINCT = ["#FF6B9D","#45B7D1","#96CEB4","#FFEAA7","#DDA0DD","#98D8C8",
-            "#F7DC6F","#BB8FCE","#85C1E9","#F1948A","#82E0AA","#F0B27A"]
-            ax1.pie(vals,labels=None,colors=DISTINCT[:len(vals)],autopct="%1.0f%%",
+            ax1.pie(vals,labels=None,colors=T["CHART"][:len(vals)],autopct="%1.0f%%",
                     startangle=140,wedgeprops={"edgecolor":"white","linewidth":2},
                     textprops={"fontsize":8,"color":T["TEXT"]})
             ax1.legend(clean_labels,loc="lower center",bbox_to_anchor=(0.5,-0.35),
