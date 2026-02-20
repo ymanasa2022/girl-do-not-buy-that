@@ -77,10 +77,10 @@ THEMES = {
 
 T = dict(THEMES["💖 Tickle-me-pink"])
 
-FNT       = ("Helvetica", 12)
+FNT       = ("Helvetica", 13)
 FNT_B     = ("Helvetica", 14, "bold")
 FNT_TITLE = ("Helvetica", 20, "bold")
-FNT_S     = ("Helvetica", 13)
+FNT_S     = ("Helvetica", 11)
 FNT_BIG   = ("Helvetica", 24, "bold")
 
 DATA_FILE = os.path.join(os.path.expanduser("~"), "girl_do_not_buy_that_data.json")
@@ -99,12 +99,10 @@ APPLE_MAP = {
     "travel":         "✈️ Travel",
     "transportation": "🚗 Transport",
     "transport":      "🚗 Transport",
-    "gas":      "🚗 Transport",
     "health":         "🏥 Medical",
     "medical":        "🏥 Medical",
     "parking":        "🅿️ Parking",
     "utilities":      "💡 Utilities",
-    "Bills & Utilities": "💡 Utilities",
     "subscriptions":  "🔂 Subscriptions",
     "self care":      "💅 Self-care",
     "personal care":  "💅 Self-care",
@@ -389,7 +387,7 @@ class DashboardFrame(tk.Frame):
         row = tk.Frame(self.body, bg=T["BG"])
         row.pack(fill="x", pady=(0,14))
         for title, val, color, icon in [
-                ("What's Left 😬", income-expense, T["ACCENT2"],"💰"),
+                ("What's Left 😬", income-expense, T["ACCENT"],"💰"),
                 ("Money In 🙏",    income,          "#7DC99A", "📈"),
                 ("Crimes 💀",      expense,         "#E07A7A", "📉")]:
             c = tk.Frame(row, bg=T["WHITE"], highlightbackground=T["BORDER"],
@@ -885,53 +883,76 @@ class ImportCSVFrame(tk.Frame):
             for w in self.unmatched_frame.winfo_children(): w.destroy()
             self._cat_vars.clear()
 
-            if all_unmatched:
-                tk.Label(self.unmatched_frame,
-                         text=f"⚠️ {len(all_unmatched)} unrecognised categor{'y' if len(all_unmatched)==1 else 'ies'} — assign them below so nothing gets lost in 📦 Other:",
+            # Show a row for every transaction that ended up as 📦 Other
+            other_txns = [(i, t) for i, t in enumerate(self.preview_data)
+                          if t["category"] == "📦 Other"]
+
+            if other_txns:
+                hdr_txt = f"⚠️ {len(other_txns)} transaction{'s' if len(other_txns)>1 else ''} landed in 📦 Other — assign categories below:"
+                tk.Label(self.unmatched_frame, text=hdr_txt,
                          font=FNT_S, bg=T["BG"], fg="#E07A7A").pack(anchor="w", pady=(4,4))
-                grid = tk.Frame(self.unmatched_frame, bg=T["BG"])
-                grid.pack(fill="x")
-                for i, raw in enumerate(sorted(all_unmatched)):
+
+                # Scrollable container
+                outer = tk.Frame(self.unmatched_frame, bg=T["BG"],
+                                 highlightbackground=T["BORDER"], highlightthickness=1)
+                outer.pack(fill="x")
+                canvas_w = tk.Canvas(outer, bg=T["BG"], highlightthickness=0,
+                                     height=min(len(other_txns), 5) * 46)
+                vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas_w.yview)
+                canvas_w.configure(yscrollcommand=vsb.set)
+                vsb.pack(side="right", fill="y")
+                canvas_w.pack(side="left", fill="both", expand=True)
+                inner = tk.Frame(canvas_w, bg=T["BG"])
+                inner_id = canvas_w.create_window((0,0), window=inner, anchor="nw")
+                def _on_resize(e, c=canvas_w, iid=inner_id):
+                    c.itemconfig(iid, width=e.width)
+                canvas_w.bind("<Configure>", _on_resize)
+                inner.bind("<Configure>", lambda e, c=canvas_w:
+                           c.configure(scrollregion=c.bbox("all")))
+
+                for idx, (txn_i, t) in enumerate(other_txns):
                     var = tk.StringVar(value="📦 Other")
-                    self._cat_vars[raw] = var
-                    row_f = tk.Frame(grid, bg=T["WHITE"],
-                                     highlightbackground=T["BORDER"], highlightthickness=1,
+                    self._cat_vars[txn_i] = var
+                    row_f = tk.Frame(inner,
+                                     bg=T["WHITE"] if idx % 2 == 0 else T["PANEL"],
                                      padx=10, pady=6)
-                    row_f.pack(fill="x", pady=2)
-                    tk.Label(row_f, text=f'"{raw}"', font=FNT_B, bg=T["WHITE"],
-                             fg="#E07A7A", width=24, anchor="w").pack(side="left")
-                    tk.Label(row_f, text="→  map to:", font=FNT_S, bg=T["WHITE"],
-                             fg=T["SUBTEXT"]).pack(side="left", padx=(6,4))
+                    row_f.pack(fill="x")
+                    # Date
+                    tk.Label(row_f, text=t["date"][:10], font=FNT_S,
+                             bg=row_f["bg"], fg=T["SUBTEXT"], width=10).pack(side="left")
+                    # Merchant/note
+                    note_txt = (t.get("note") or "—")[:28]
+                    tk.Label(row_f, text=note_txt, font=FNT_S,
+                             bg=row_f["bg"], fg=T["TEXT"], width=28, anchor="w").pack(side="left", padx=6)
+                    # Raw CSV category
+                    raw_lbl = (t.get("_raw_cat") or "—")[:20]
+                    tk.Label(row_f, text=f'csv: "{raw_lbl}"', font=FNT_S,
+                             bg=row_f["bg"], fg="#E07A7A", width=20, anchor="w").pack(side="left", padx=4)
+                    tk.Label(row_f, text="→", font=FNT_S,
+                             bg=row_f["bg"], fg=T["SUBTEXT"]).pack(side="left", padx=4)
                     cb = ttk.Combobox(row_f, textvariable=var,
-                                      values=CATEGORIES, width=22,
+                                      values=CATEGORIES, width=20,
                                       state="readonly", font=FNT_S)
                     cb.pack(side="left", padx=4)
-                    # live-update preview tree when user picks a category
-                    var.trace_add("write", lambda *_, r=raw, v=var: self._remap_cat(r, v.get()))
+                    var.trace_add("write", lambda *_, ti=txn_i, v=var: self._remap_cat_by_idx(ti, v.get()))
+
                 tk.Label(self.unmatched_frame,
                          text="Changes apply instantly to the preview above ✨",
-                         font=FNT_S, bg=T["BG"], fg=T["SUBTEXT"]).pack(anchor="w", pady=(2,0))
+                         font=FNT_S, bg=T["BG"], fg=T["SUBTEXT"]).pack(anchor="w", pady=(4,0))
         except Exception as e:
             messagebox.showerror("Error",f"Could not read CSV:\n{e}")
             self.status.configure(text="❌ File refused to cooperate. Typical. 😤", fg="#E07A7A")
 
-    def _remap_cat(self, raw_cat, new_cat):
-        """Live-update preview_data and tree when user reassigns an unmatched category."""
-        # Update all matching transactions in preview_data
-        for t in self.preview_data:
-            if t.get("_raw_cat") == raw_cat:
-                t["category"] = new_cat
-        # Refresh tree rows that had this raw category
-        for iid in self.tree.get_children():
-            vals = list(self.tree.item(iid, "values"))
-            if vals[2] == "📦 Other" or vals[2] == new_cat:
-                # re-check by matching stored raw cat on the txn
-                idx = self.tree.index(iid)
-                if idx < len(self.preview_data):
-                    t = self.preview_data[idx]
-                    if t.get("_raw_cat") == raw_cat:
-                        vals[2] = new_cat
-                        self.tree.item(iid, values=vals)
+    def _remap_cat_by_idx(self, txn_idx, new_cat):
+        """Live-update a single transaction by its index in preview_data."""
+        if txn_idx < len(self.preview_data):
+            self.preview_data[txn_idx]["category"] = new_cat
+        # Update corresponding tree row
+        iids = self.tree.get_children()
+        if txn_idx < len(iids):
+            vals = list(self.tree.item(iids[txn_idx], "values"))
+            vals[2] = new_cat
+            self.tree.item(iids[txn_idx], values=vals)
 
     def _import_all(self):
         if not self.preview_data:
