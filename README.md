@@ -3,6 +3,9 @@
 A sassy personal finance tracker for people who need their money app to match their energy. Built with Python + tkinter. No subscriptions, no ads, no judgment (okay, a little judgment).
 
 ---
+## Feedback 
+Please leave errors you encounter or feature requests [here](https://docs.google.com/forms/d/e/1FAIpQLSc5_3aFs6eyPEtwM7KT3I0_3xuyg4ApfWDXaQvrAdRG4jgRgQ/viewform?usp=dialog)
+
 ## Downloading App
 Enter the following command into your terminal to download the app.
 
