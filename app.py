@@ -317,8 +317,8 @@ class DashboardFrame(tk.Frame):
         self.app = app
         self.hdr = tk.Frame(self, bg=T["ACCENT"], pady=16)
         self.hdr.pack(fill="x")
-        self.hdr_l = tk.Label(self.hdr, text="Girl Math Time 🧮",
-                               font=FNT_TITLE, bg=T["ACCENT"], fg="#986F89")
+        self.hdr_l = tk.Label(self.hdr, text="Girl Math Time!!",
+                               font=FNT_TITLE, bg=T["ACCENT"], fg=T["ACCENT2"])
         self.hdr_l.pack()
         self.body = tk.Frame(self, bg=T["BG"])
         self.body.pack(fill="both", expand=True, padx=28, pady=18)
@@ -326,7 +326,7 @@ class DashboardFrame(tk.Frame):
     def retheme(self):
         self.configure(bg=T["BG"])
         self.hdr.configure(bg=T["ACCENT"])
-        self.hdr_l.configure(bg=T["ACCENT"], fg="#4A0030")
+        self.hdr_l.configure(bg=T["ACCENT"], fg=T["ACCENT2"])
         self.body.configure(bg=T["BG"])
         self.refresh()
 
@@ -384,7 +384,7 @@ class DashboardFrame(tk.Frame):
         row = tk.Frame(self.body, bg=T["BG"])
         row.pack(fill="x", pady=(0,14))
         for title, val, color, icon in [
-                ("What's Left 😬", income-expense, T["ACCENT"],"💰"),
+                ("What's Left 😬", income-expense, T["ACCENT2"],"💰"),
                 ("Money In 🙏",    income,          "#7DC99A", "📈"),
                 ("Crimes 💀",      expense,         "#E07A7A", "📉")]:
             c = tk.Frame(row, bg=T["WHITE"], highlightbackground=T["BORDER"],
