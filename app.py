@@ -97,9 +97,9 @@ APPLE_MAP = {
     "shopping":       "🛍️ Shopping",
     "entertainment":  "🎉 Entertainment",
     "travel":         "✈️ Travel",
-    "transportation": "✈️ Travel",
-    "transport":      "✈️ Travel",
-    "gas":      "✈️ Travel",
+    "transportation": "🚗 Transport",
+    "transport":      "🚗 Transport",
+    "gas":      "🚗 Transport",
     "health":         "🏥 Medical",
     "medical":        "🏥 Medical",
     "parking":        "🅿️ Parking",
@@ -114,7 +114,7 @@ APPLE_MAP = {
     "education":      "📚 Education",
 }
 
-def map_cat(raw):
+def map_cat(raw, unmatched_set=None):
     if not raw: return "📦 Other"
     raw_low = raw.lower().strip()
     # exact match first (Apple Card sends clean category names)
@@ -124,6 +124,9 @@ def map_cat(raw):
     for k, v in APPLE_MAP.items():
         if k in raw_low:
             return v
+    # No match — record the original value if caller wants to know
+    if unmatched_set is not None and raw.strip():
+        unmatched_set.add(raw.strip())
     return "📦 Other"
 
 def load_data():
@@ -735,6 +738,10 @@ class ImportCSVFrame(tk.Frame):
 
         self.status = tk.Label(self, text="", font=FNT, bg=T["BG"], fg=T["SUBTEXT"])
         self.status.pack()
+        # Unmatched category resolution panel (shown dynamically after load)
+        self.unmatched_frame = tk.Frame(self, bg=T["BG"])
+        self.unmatched_frame.pack(fill="x", padx=28, pady=(0,4))
+        self._cat_vars = {}  # raw_cat_name -> StringVar
         tk.Label(self, text="Crime Scene Preview 🔍", font=FNT_B,
                  bg=T["BG"], fg=T["TEXT"]).pack(anchor="w", padx=28, pady=(8,2))
         wrap = tk.Frame(self, bg=T["BG"])
@@ -770,6 +777,10 @@ class ImportCSVFrame(tk.Frame):
             "ach deposit internet transfer from account ending",
             "ach deposit",
             "internet transfer from account",
+            "automatic payment",
+            "autopay",
+            "online payment",
+            "mobile payment",
         ]
 
         try:
@@ -805,14 +816,17 @@ class ImportCSVFrame(tk.Frame):
                     tl = get(row,"type","transaction type").strip()
                     tl_low = tl.lower()
 
-                    if tl_low == "debit":
-                        # Apple Cash Back — money coming to you
-                        txn_type = "income"
-                    elif tl_low == "payment":
-                        # Credit card purchase — money you spent
+                    # Expense types — always treat amount as negative (spent)
+                    EXPENSE_TYPES = {"payment","purchase","sale","debit"}
+                    # Income types — always treat amount as positive (received)
+                    INCOME_TYPES  = {"return","credit","refund"}
+
+                    if tl_low in EXPENSE_TYPES:
                         txn_type = "expense"
+                    elif tl_low in INCOME_TYPES:
+                        txn_type = "income"
                     else:
-                        # Fallback for non-Apple CSVs
+                        # Fallback: guess from sign of amount or keyword
                         txn_type = "income" if ("credit" in tl_low) else "expense"
 
                     amount = abs(amount)
@@ -833,21 +847,91 @@ class ImportCSVFrame(tk.Frame):
                         skipped += 1
                         continue
 
+                    unmatched_cats = set()
+                    raw_cat_val = get(row,"category")
+                    cat = map_cat(raw_cat_val, unmatched_cats)
                     txn = {"date":date_iso,"type":txn_type,
-                           "category":map_cat(get(row,"category")),
-                           "note":note,"amount":amount}
+                           "category":cat,
+                           "note":note,"amount":amount,
+                           "_raw_cat": raw_cat_val if cat == "📦 Other" else None}
                     self.preview_data.append(txn)
                     sign = "+" if txn_type=="income" else "-"
+                    row_bg = "" if cat != "📦 Other" else ""
                     self.tree.insert("","end", values=(date_iso[:10],txn_type.capitalize(),
-                                     txn["category"],note,f"{sign}${amount:.2f}"))
+                                     cat,note,f"{sign}${amount:.2f}"))
                     count += 1
+            # collect all unmatched across all rows
+            all_unmatched = set()
+            for txn in self.preview_data:
+                raw_cat = get({}, "category")  # placeholder — we re-check below
+            # re-scan preview rows for unmatched (tree already built, just need warning)
+            all_unmatched = set()
+            with open(path, newline="", encoding="utf-8-sig") as f2:
+                r2 = csv.DictReader(f2)
+                hmap2 = {h.lower().strip():h for h in (r2.fieldnames or [])}
+                def get2(row,*keys):
+                    for k in keys:
+                        for hk,orig in hmap2.items():
+                            if k in hk: return row.get(orig,"").strip()
+                    return ""
+                for row2 in r2:
+                    map_cat(get2(row2,"category"), all_unmatched)
+
             month_label = f"{self.filter_month.get()} {target_year}"
-            self.status.configure(
-                text=f"👀 {count} transactions for {month_label} loaded! ({ignored} bank transfers ignored, {skipped} other months skipped). Hit Import!",
-                fg="#7DC99A")
+            status_text = f"👀 {count} transactions for {month_label} loaded! ({ignored} bank transfers ignored, {skipped} other months skipped). Hit Import!"
+            self.status.configure(text=status_text, fg="#7DC99A")
+
+            # Clear old resolution widgets
+            for w in self.unmatched_frame.winfo_children(): w.destroy()
+            self._cat_vars.clear()
+
+            if all_unmatched:
+                tk.Label(self.unmatched_frame,
+                         text=f"⚠️ {len(all_unmatched)} unrecognised categor{'y' if len(all_unmatched)==1 else 'ies'} — assign them below so nothing gets lost in 📦 Other:",
+                         font=FNT_S, bg=T["BG"], fg="#E07A7A").pack(anchor="w", pady=(4,4))
+                grid = tk.Frame(self.unmatched_frame, bg=T["BG"])
+                grid.pack(fill="x")
+                for i, raw in enumerate(sorted(all_unmatched)):
+                    var = tk.StringVar(value="📦 Other")
+                    self._cat_vars[raw] = var
+                    row_f = tk.Frame(grid, bg=T["WHITE"],
+                                     highlightbackground=T["BORDER"], highlightthickness=1,
+                                     padx=10, pady=6)
+                    row_f.pack(fill="x", pady=2)
+                    tk.Label(row_f, text=f'"{raw}"', font=FNT_B, bg=T["WHITE"],
+                             fg="#E07A7A", width=24, anchor="w").pack(side="left")
+                    tk.Label(row_f, text="→  map to:", font=FNT_S, bg=T["WHITE"],
+                             fg=T["SUBTEXT"]).pack(side="left", padx=(6,4))
+                    cb = ttk.Combobox(row_f, textvariable=var,
+                                      values=CATEGORIES, width=22,
+                                      state="readonly", font=FNT_S)
+                    cb.pack(side="left", padx=4)
+                    # live-update preview tree when user picks a category
+                    var.trace_add("write", lambda *_, r=raw, v=var: self._remap_cat(r, v.get()))
+                tk.Label(self.unmatched_frame,
+                         text="Changes apply instantly to the preview above ✨",
+                         font=FNT_S, bg=T["BG"], fg=T["SUBTEXT"]).pack(anchor="w", pady=(2,0))
         except Exception as e:
             messagebox.showerror("Error",f"Could not read CSV:\n{e}")
             self.status.configure(text="❌ File refused to cooperate. Typical. 😤", fg="#E07A7A")
+
+    def _remap_cat(self, raw_cat, new_cat):
+        """Live-update preview_data and tree when user reassigns an unmatched category."""
+        # Update all matching transactions in preview_data
+        for t in self.preview_data:
+            if t.get("_raw_cat") == raw_cat:
+                t["category"] = new_cat
+        # Refresh tree rows that had this raw category
+        for iid in self.tree.get_children():
+            vals = list(self.tree.item(iid, "values"))
+            if vals[2] == "📦 Other" or vals[2] == new_cat:
+                # re-check by matching stored raw cat on the txn
+                idx = self.tree.index(iid)
+                if idx < len(self.preview_data):
+                    t = self.preview_data[idx]
+                    if t.get("_raw_cat") == raw_cat:
+                        vals[2] = new_cat
+                        self.tree.item(iid, values=vals)
 
     def _import_all(self):
         if not self.preview_data:
@@ -857,7 +941,8 @@ class ImportCSVFrame(tk.Frame):
         for t in self.preview_data:
             key = (t["date"][:10],t["note"],t["amount"])
             if key not in existing:
-                self.app.data["transactions"].append(t); existing.add(key); added+=1
+                clean = {k:v for k,v in t.items() if k != "_raw_cat"}
+                self.app.data["transactions"].append(clean); existing.add(key); added+=1
         save_data(self.app.data)
         self.status.configure(
             text=f"🎉 Imported {added} transactions. No judgment. Okay a LITTLE judgment. ({len(self.preview_data)-added} dupes skipped 🙏)",
