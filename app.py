@@ -1302,9 +1302,15 @@ class SummaryFrame(tk.Frame):
             labels=list(exp_by_cat.keys())
             vals=list(exp_by_cat.values())
             clean_labels=[strip_emoji(l) for l in labels]
-            DISTINCT = ["#FF6B9D","#45B7D1","#96CEB4","#FFEAA7","#DDA0DD","#98D8C8",
-            "#F7DC6F","#BB8FCE","#85C1E9","#F1948A","#82E0AA","#F0B27A"]
-            ax1.pie(vals,labels=None,colors=DISTINCT[:len(vals)],autopct="%1.0f%%",
+            # Fixed high-contrast palette — consistent per category across all months/themes
+            CAT_COLORS = [
+                "#FF6B9D","#45B7D1","#FFA500","#96CEB4","#DDA0DD",
+                "#F7DC6F","#E74C3C","#3498DB","#2ECC71","#E67E22",
+                "#9B59B6","#1ABC9C","#E91E63","#00BCD4",
+            ]
+            cat_colors = [CAT_COLORS[CATEGORIES.index(l) % len(CAT_COLORS)]
+                          if l in CATEGORIES else CAT_COLORS[0] for l in labels]
+            ax1.pie(vals,labels=None,colors=cat_colors,autopct="%1.0f%%",
                     startangle=140,wedgeprops={"edgecolor":"white","linewidth":2},
                     textprops={"fontsize":8,"color":T["TEXT"]})
             ax1.legend(clean_labels,loc="lower center",bbox_to_anchor=(0.5,-0.35),
