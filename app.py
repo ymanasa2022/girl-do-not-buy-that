@@ -317,8 +317,8 @@ class DashboardFrame(tk.Frame):
         self.app = app
         self.hdr = tk.Frame(self, bg=T["ACCENT"], pady=16)
         self.hdr.pack(fill="x")
-        self.hdr_l = tk.Label(self.hdr, text="Girl Math Time 🧮",
-                               font=FNT_TITLE, bg=T["ACCENT"], fg="#986F89")
+        self.hdr_l = tk.Label(self.hdr, text="Girl Math Time!!",
+                               font=FNT_TITLE, bg=T["ACCENT"], fg=T["ACCENT2"])
         self.hdr_l.pack()
         self.body = tk.Frame(self, bg=T["BG"])
         self.body.pack(fill="both", expand=True, padx=28, pady=18)
@@ -326,7 +326,7 @@ class DashboardFrame(tk.Frame):
     def retheme(self):
         self.configure(bg=T["BG"])
         self.hdr.configure(bg=T["ACCENT"])
-        self.hdr_l.configure(bg=T["ACCENT"], fg="#4A0030")
+        self.hdr_l.configure(bg=T["ACCENT"], fg=T["ACCENT2"])
         self.body.configure(bg=T["BG"])
         self.refresh()
 
@@ -1014,7 +1014,7 @@ class IncomeFrame(tk.Frame):
         self.src_row = tk.Frame(self, bg=T["BG"])
         self.src_row.pack(fill="x", padx=28, pady=(0,6))
 
-        tk.Label(self, text="💸 Income History (slay!)",
+        tk.Label(self, text="💸 Slay Income History",
                  font=FNT_B, bg=T["BG"], fg=T["TEXT"]).pack(anchor="w", padx=28, pady=(4,2))
         wrap = tk.Frame(self, bg=T["BG"])
         wrap.pack(fill="both", expand=True, padx=28, pady=(0,8))
@@ -1183,7 +1183,9 @@ class SummaryFrame(tk.Frame):
             labels=list(exp_by_cat.keys())
             vals=list(exp_by_cat.values())
             clean_labels=[strip_emoji(l) for l in labels]
-            ax1.pie(vals,labels=None,colors=T["CHART"][:len(vals)],autopct="%1.0f%%",
+            DISTINCT = ["#FF6B9D","#45B7D1","#96CEB4","#FFEAA7","#DDA0DD","#98D8C8",
+            "#F7DC6F","#BB8FCE","#85C1E9","#F1948A","#82E0AA","#F0B27A"]
+            ax1.pie(vals,labels=None,colors=DISTINCT[:len(vals)],autopct="%1.0f%%",
                     startangle=140,wedgeprops={"edgecolor":"white","linewidth":2},
                     textprops={"fontsize":8,"color":T["TEXT"]})
             ax1.legend(clean_labels,loc="lower center",bbox_to_anchor=(0.5,-0.35),
