@@ -127,7 +127,7 @@ def map_cat(raw):
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE) as f: return json.load(f)
-    return {"transactions":[],"savings_goals":[],"budgets":{},"theme":"💖 Tickle-me-pink"}
+    return {"transactions":[],"savings_goals":[],"budgets":{},"theme":"💖 Tickle-me-pink","starting_balance":0.0}
 
 def save_data(data):
     with open(DATA_FILE,"w") as f: json.dump(data,f,indent=2)
@@ -343,10 +343,11 @@ class DashboardFrame(tk.Frame):
         expense = sum(t["amount"] for t in mt if t["type"]=="expense")
 
         # All-time net worth
-        total_in  = sum(t["amount"] for t in txns if t["type"]=="income")
-        total_out = sum(t["amount"] for t in txns if t["type"]=="expense")
-        net_worth = total_in - total_out
-        nw_color  = "#7DC99A" if net_worth >= 0 else "#E07A7A"
+        total_in   = sum(t["amount"] for t in txns if t["type"]=="income")
+        total_out  = sum(t["amount"] for t in txns if t["type"]=="expense")
+        starting   = float(self.app.data.get("starting_balance", 0.0))
+        net_worth  = starting + total_in - total_out
+        nw_color   = "#7DC99A" if net_worth >= 0 else "#E07A7A"
 
         # ── Net worth banner ──────────────────────────────────────
         nw = tk.Frame(self.body, bg=T["WHITE"], highlightbackground=T["BORDER"],
@@ -355,17 +356,35 @@ class DashboardFrame(tk.Frame):
         left = tk.Frame(nw, bg=T["WHITE"]); left.pack(side="left", expand=True)
         tk.Label(left, text="💎 Total Net Worth", font=FNT_B, bg=T["WHITE"], fg=T["SUBTEXT"]).pack(anchor="w")
         tk.Label(left, text=f"${net_worth:,.2f}", font=FNT_BIG, bg=T["WHITE"], fg=nw_color).pack(anchor="w")
+        if starting != 0:
+            tk.Label(left, text=f"incl. ${starting:,.2f} starting balance",
+                     font=FNT_S, bg=T["WHITE"], fg=T["SUBTEXT"]).pack(anchor="w")
         # mini breakdown on the right
         right = tk.Frame(nw, bg=T["WHITE"]); right.pack(side="right", padx=20)
+        if starting != 0:
+            tk.Label(right, text=f"starting:      +${starting:,.2f}", font=FNT_S, bg=T["WHITE"], fg="#7DC99A", anchor="e").pack(anchor="e")
         tk.Label(right, text=f"all-time in:   +${total_in:,.2f}",  font=FNT_S, bg=T["WHITE"], fg="#7DC99A", anchor="e").pack(anchor="e")
         tk.Label(right, text=f"all-time out:  -${total_out:,.2f}", font=FNT_S, bg=T["WHITE"], fg="#E07A7A", anchor="e").pack(anchor="e")
         tk.Label(right, text=f"{len(txns)} transactions tracked", font=FNT_S, bg=T["WHITE"], fg=T["SUBTEXT"], anchor="e").pack(anchor="e", pady=(4,0))
+        def _set_starting():
+            cur = self.app.data.get("starting_balance", 0.0)
+            val = tk.simpledialog.askfloat("Starting Balance 💰",
+                f"Enter your balance before you started tracking\n(current: ${cur:,.2f})",
+                parent=self, initialvalue=cur)
+            if val is not None:
+                self.app.data["starting_balance"] = val
+                save_data(self.app.data)
+                self.refresh()
+        tk.Button(nw, text="✏️ Set Starting Balance", font=FNT_S,
+                  bg=T["PANEL"], fg=T["TEXT"], bd=0, padx=10, pady=5,
+                  cursor="hand2", relief="flat", command=_set_starting
+                  ).pack(side="bottom", anchor="w", pady=(8,0))
 
         # ── This month cards ──────────────────────────────────────
         row = tk.Frame(self.body, bg=T["BG"])
         row.pack(fill="x", pady=(0,14))
         for title, val, color, icon in [
-                ("What's Left 😬", income-expense, T["ACCENT"],"💰"),
+                ("What's Left 😬", income-expense, T["ACCENT2"],"💰"),
                 ("Money In 🙏",    income,          "#7DC99A", "📈"),
                 ("Crimes 💀",      expense,         "#E07A7A", "📉")]:
             c = tk.Frame(row, bg=T["WHITE"], highlightbackground=T["BORDER"],
@@ -462,22 +481,28 @@ class TransactionsFrame(tk.Frame):
 
         self._editing_idx = None  # index into sorted transactions of row being edited
 
-        # ── Header row with select controls ──────────────────────
-        hdr = tk.Frame(self, bg=T["BG"])
-        hdr.pack(fill="x", padx=28, pady=(8,2))
-        tk.Label(hdr, text="The Full Evidence File 🗂️", font=FNT_B,
+        # ── Filter + header row ───────────────────────────────────
+        flt = tk.Frame(self, bg=T["BG"])
+        flt.pack(fill="x", padx=28, pady=(8,2))
+        tk.Label(flt, text="The Full Evidence File 🗂️", font=FNT_B,
                  bg=T["BG"], fg=T["TEXT"]).pack(side="left")
-        tk.Label(hdr, text="  Double-click to edit ✏️", font=FNT_S,
+        tk.Label(flt, text="  Double-click to edit ✏️", font=FNT_S,
                  bg=T["BG"], fg=T["SUBTEXT"]).pack(side="left")
-        # Select all / deselect all buttons on the right
-        btn(hdr, "☑ Select All",   self._select_all,   color=T["PANEL"], fg=T["TEXT"]).pack(side="right", padx=4)
-        btn(hdr, "☐ Deselect All", self._deselect_all, color=T["PANEL"], fg=T["TEXT"]).pack(side="right", padx=4)
+        # Category filter on the right
+        btn(flt, "☑ Select All",   self._select_all,   color=T["PANEL"], fg=T["TEXT"]).pack(side="right", padx=4)
+        btn(flt, "☐ Deselect All", self._deselect_all, color=T["PANEL"], fg=T["TEXT"]).pack(side="right", padx=4)
+        self.filter_cat = tk.StringVar(value="All")
+        ttk.Combobox(flt, textvariable=self.filter_cat,
+                     values=["All"] + CATEGORIES,
+                     width=18, state="readonly", font=FNT_S).pack(side="right", padx=4)
+        tk.Label(flt, text="Filter:", font=FNT_S, bg=T["BG"], fg=T["SUBTEXT"]).pack(side="right")
+        self.filter_cat.trace_add("write", lambda *_: self.refresh())
 
         self.wrap = tk.Frame(self, bg=T["BG"])
         self.wrap.pack(fill="both", expand=True, padx=28, pady=(2,0))
-        cols = ("✓","Date","Type","Category","Merchant / Note","Amount")
+        cols = ("✓","Date","Category","Merchant / Note","Amount")
         self.tree = ttk.Treeview(self.wrap, columns=cols, show="headings", style="A.Treeview")
-        col_widths = [32,100,80,150,210,100]
+        col_widths = [32,110,160,240,110]
         for col,w in zip(cols, col_widths):
             self.tree.heading(col, text=col)
             self.tree.column(col, width=w, anchor="center", minwidth=w)
@@ -619,11 +644,15 @@ class TransactionsFrame(tk.Frame):
     def refresh(self):
         self._checked.clear()
         for row in self.tree.get_children(): self.tree.delete(row)
-        for t in sorted(self.app.data["transactions"], key=lambda t:t["date"], reverse=True):
+        cat_filter = self.filter_cat.get() if hasattr(self, "filter_cat") else "All"
+        txns = sorted(self.app.data["transactions"], key=lambda t:t["date"], reverse=True)
+        if cat_filter != "All":
+            txns = [t for t in txns if t["category"] == cat_filter]
+        for t in txns:
             sign = "+" if t["type"]=="income" else "-"
             iid = self.tree.insert("","end", values=(
                 "☐",
-                t["date"][:10], t["type"].capitalize(),
+                t["date"][:10],
                 t["category"], t.get("note",""),
                 f"{sign}${t['amount']:.2f}"
             ))
@@ -1104,7 +1133,7 @@ class IncomeFrame(tk.Frame):
         self.src_row = tk.Frame(self, bg=T["BG"])
         self.src_row.pack(fill="x", padx=28, pady=(0,6))
 
-        tk.Label(self, text="💸 Income History (slay!)",
+        tk.Label(self, text="💸 Slay Income History",
                  font=FNT_B, bg=T["BG"], fg=T["TEXT"]).pack(anchor="w", padx=28, pady=(4,2))
         wrap = tk.Frame(self, bg=T["BG"])
         wrap.pack(fill="both", expand=True, padx=28, pady=(0,8))
@@ -1255,7 +1284,7 @@ class SummaryFrame(tk.Frame):
         row=tk.Frame(self.chart_area,bg=T["BG"]); row.pack(fill="x",pady=(0,10))
         for title,val,col in [("Money In 🙏",income,"#7DC99A"),
                                ("Money Gone 💀",expense,"#E07A7A"),
-                               ("What's Left 😬",income-expense,T["ACCENT"])]:
+                               ("What's Left 😬",income-expense,T["ACCENT2"])]:
             c=tk.Frame(row,bg=T["WHITE"],highlightbackground=T["BORDER"],
                        highlightthickness=1,padx=16,pady=10)
             c.pack(side="left",expand=True,fill="both",padx=6)
@@ -1273,7 +1302,9 @@ class SummaryFrame(tk.Frame):
             labels=list(exp_by_cat.keys())
             vals=list(exp_by_cat.values())
             clean_labels=[strip_emoji(l) for l in labels]
-            ax1.pie(vals,labels=None,colors=T["CHART"][:len(vals)],autopct="%1.0f%%",
+            DISTINCT = ["#FF6B9D","#45B7D1","#96CEB4","#FFEAA7","#DDA0DD","#98D8C8",
+            "#F7DC6F","#BB8FCE","#85C1E9","#F1948A","#82E0AA","#F0B27A"]
+            ax1.pie(vals,labels=None,colors=DISTINCT[:len(vals)],autopct="%1.0f%%",
                     startangle=140,wedgeprops={"edgecolor":"white","linewidth":2},
                     textprops={"fontsize":8,"color":T["TEXT"]})
             ax1.legend(clean_labels,loc="lower center",bbox_to_anchor=(0.5,-0.35),
