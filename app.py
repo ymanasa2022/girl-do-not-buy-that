@@ -6,6 +6,7 @@ import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
 
 # ── Icon paths (sit next to the script) ──────────────────────────
 _DIR       = os.path.dirname(os.path.abspath(__file__))
@@ -1690,253 +1691,281 @@ class IncomeFrame(tk.Frame):
 
 # ══════════════════════════════════════════════════════════════════
 class SummaryFrame(tk.Frame):
+    CAT_COLORS = [
+        "#FF6B9D","#45B7D1","#FFA500","#96CEB4","#DDA0DD",
+        "#F7DC6F","#E74C3C","#3498DB","#2ECC71","#E67E22",
+        "#9B59B6","#1ABC9C","#E91E63","#00BCD4",
+    ]
+
     def __init__(self, parent, app):
         super().__init__(parent, bg=T["BG"])
         self.app = app; self._build()
 
     def _build(self):
-        tk.Label(self,text="📊 The Hard Truth",font=FNT_TITLE,
-                 bg=T["BG"],fg=T["TEXT"]).pack(pady=(18,4))
-        now=datetime.now()
+        tk.Label(self, text="📊 The Hard Truth", font=FNT_TITLE,
+                 bg=T["BG"], fg=T["TEXT"]).pack(pady=(18,4))
+        now = datetime.now()
         years = list(range(2020, now.year+2))
 
-        # ── Range mode toggle ─────────────────────────────────────
+        # ── Mode toggle ───────────────────────────────────────────
         mode_f = tk.Frame(self, bg=T["BG"]); mode_f.pack()
         self.range_mode = tk.StringVar(value="single")
-        tk.Radiobutton(mode_f, text="Single Month", variable=self.range_mode, value="single",
-                       font=FNT, bg=T["BG"], fg=T["TEXT"], selectcolor=T["ACCENT2"],
-                       activebackground=T["BG"], command=self._toggle_mode).pack(side="left", padx=8)
-        tk.Radiobutton(mode_f, text="Date Range", variable=self.range_mode, value="range",
-                       font=FNT, bg=T["BG"], fg=T["TEXT"], selectcolor=T["ACCENT2"],
-                       activebackground=T["BG"], command=self._toggle_mode).pack(side="left", padx=8)
+        for txt, val in [("Single Month","single"),("Full Year","year"),("Date Range","range")]:
+            tk.Radiobutton(mode_f, text=txt, variable=self.range_mode, value=val,
+                           font=FNT, bg=T["BG"], fg=T["TEXT"], selectcolor=T["ACCENT2"],
+                           activebackground=T["BG"], command=self._toggle_mode
+                           ).pack(side="left", padx=10)
 
-        # ── Single month controls ─────────────────────────────────
+        # ── Single month ──────────────────────────────────────────
         self.single_f = tk.Frame(self, bg=T["BG"]); self.single_f.pack(pady=(4,0))
         self.month_var = tk.StringVar(value=MONTHS[now.month-1])
         self.year_var  = tk.IntVar(value=now.year)
-        tk.Label(self.single_f,text="Month:",font=FNT,bg=T["BG"],fg=T["TEXT"]).pack(side="left")
-        ttk.Combobox(self.single_f,textvariable=self.month_var,values=MONTHS,
-                     width=10,state="readonly").pack(side="left",padx=4)
-        tk.Label(self.single_f,text="Year:",font=FNT,bg=T["BG"],fg=T["TEXT"]).pack(side="left",padx=(10,0))
-        ttk.Combobox(self.single_f,textvariable=self.year_var,
-                     values=years,width=7,state="readonly").pack(side="left",padx=4)
+        tk.Label(self.single_f, text="Month:", font=FNT, bg=T["BG"], fg=T["TEXT"]).pack(side="left")
+        ttk.Combobox(self.single_f, textvariable=self.month_var, values=MONTHS,
+                     width=10, state="readonly").pack(side="left", padx=4)
+        tk.Label(self.single_f, text="Year:", font=FNT, bg=T["BG"], fg=T["TEXT"]).pack(side="left", padx=(10,0))
+        ttk.Combobox(self.single_f, textvariable=self.year_var,
+                     values=years, width=7, state="readonly").pack(side="left", padx=4)
 
-        # ── Range controls (hidden by default) ───────────────────
+        # ── Full year ─────────────────────────────────────────────
+        self.year_f = tk.Frame(self, bg=T["BG"])
+        self.year_only_var = tk.IntVar(value=now.year)
+        tk.Label(self.year_f, text="Year:", font=FNT, bg=T["BG"], fg=T["TEXT"]).pack(side="left")
+        ttk.Combobox(self.year_f, textvariable=self.year_only_var,
+                     values=years, width=7, state="readonly").pack(side="left", padx=4)
+
+        # ── Date range ────────────────────────────────────────────
         self.range_f = tk.Frame(self, bg=T["BG"])
-        # from
-        tk.Label(self.range_f,text="From:",font=FNT,bg=T["BG"],fg=T["TEXT"]).pack(side="left")
+        tk.Label(self.range_f, text="From:", font=FNT, bg=T["BG"], fg=T["TEXT"]).pack(side="left")
         self.from_month = tk.StringVar(value=MONTHS[0])
         self.from_year  = tk.IntVar(value=now.year)
-        ttk.Combobox(self.range_f,textvariable=self.from_month,values=MONTHS,
-                     width=10,state="readonly").pack(side="left",padx=4)
-        ttk.Combobox(self.range_f,textvariable=self.from_year,
-                     values=years,width=7,state="readonly").pack(side="left",padx=2)
-        # to
-        tk.Label(self.range_f,text="  To:",font=FNT,bg=T["BG"],fg=T["TEXT"]).pack(side="left")
+        ttk.Combobox(self.range_f, textvariable=self.from_month, values=MONTHS,
+                     width=10, state="readonly").pack(side="left", padx=4)
+        ttk.Combobox(self.range_f, textvariable=self.from_year,
+                     values=years, width=7, state="readonly").pack(side="left", padx=2)
+        tk.Label(self.range_f, text="  To:", font=FNT, bg=T["BG"], fg=T["TEXT"]).pack(side="left")
         self.to_month = tk.StringVar(value=MONTHS[now.month-1])
         self.to_year  = tk.IntVar(value=now.year)
-        ttk.Combobox(self.range_f,textvariable=self.to_month,values=MONTHS,
-                     width=10,state="readonly").pack(side="left",padx=4)
-        ttk.Combobox(self.range_f,textvariable=self.to_year,
-                     values=years,width=7,state="readonly").pack(side="left",padx=2)
+        ttk.Combobox(self.range_f, textvariable=self.to_month, values=MONTHS,
+                     width=10, state="readonly").pack(side="left", padx=4)
+        ttk.Combobox(self.range_f, textvariable=self.to_year,
+                     values=years, width=7, state="readonly").pack(side="left", padx=2)
 
-        # shared go button
         ctrl2 = tk.Frame(self, bg=T["BG"]); ctrl2.pack(pady=4)
-        btn(ctrl2,"🔍 Show Me the Damage",self.refresh).pack()
-        self.chart_area=tk.Frame(self,bg=T["BG"])
-        self.chart_area.pack(fill="both",expand=True,padx=20,pady=8)
+        btn(ctrl2, "🔍 Show Me the Damage", self.refresh).pack()
+        self.chart_area = tk.Frame(self, bg=T["BG"])
+        self.chart_area.pack(fill="both", expand=True, padx=20, pady=8)
 
     def _toggle_mode(self):
-        if self.range_mode.get() == "single":
-            self.range_f.pack_forget()
-            self.single_f.pack(pady=(4,0))
-        else:
-            self.single_f.pack_forget()
-            self.range_f.pack(pady=(4,0))
+        self.single_f.pack_forget()
+        self.year_f.pack_forget()
+        self.range_f.pack_forget()
+        m = self.range_mode.get()
+        if m == "single":   self.single_f.pack(pady=(4,0))
+        elif m == "year":   self.year_f.pack(pady=(4,0))
+        else:               self.range_f.pack(pady=(4,0))
 
     def retheme(self):
         self.configure(bg=T["BG"])
         for w in self.winfo_children(): w.destroy()
         self._build(); self.refresh()
 
-    def refresh(self):
-        for w in self.chart_area.winfo_children(): w.destroy()
-        self.chart_area.configure(bg=T["BG"])
-        txns=self.app.data["transactions"]
-
-        # ── Determine date range ──────────────────────────────────
-        if self.range_mode.get() == "single":
+    def _get_filtered(self):
+        """Return (transactions, range_label, x_mode) based on current mode.
+        x_mode: 'day' | 'month'
+        """
+        txns = self.app.data["transactions"]
+        mode = self.range_mode.get()
+        if mode == "single":
             month = MONTHS.index(self.month_var.get()) + 1
             year  = self.year_var.get()
-            mt = [t for t in txns if datetime.fromisoformat(t["date"]).month==month
-                  and datetime.fromisoformat(t["date"]).year==year]
-            range_label = f"{self.month_var.get()} {year}"
-            # for pie click navigation
+            mt = [t for t in txns
+                  if datetime.fromisoformat(t["date"]).month == month
+                  and datetime.fromisoformat(t["date"]).year == year]
             self._current_month = month
             self._current_year  = year
+            return mt, f"{self.month_var.get()} {year}", "day"
+        elif mode == "year":
+            year = self.year_only_var.get()
+            mt = [t for t in txns if datetime.fromisoformat(t["date"]).year == year]
+            self._current_month = None
+            self._current_year  = year
+            return mt, str(year), "month"
         else:
             fm = MONTHS.index(self.from_month.get()) + 1
-            fy = self.from_year.get()
+            fy = int(self.from_year.get())
             tm = MONTHS.index(self.to_month.get()) + 1
-            ty = self.to_year.get()
+            ty = int(self.to_year.get())
             from_dt = datetime(fy, fm, 1)
             to_dt   = datetime(ty, tm, 1)
             if from_dt > to_dt: from_dt, to_dt = to_dt, from_dt
-            mt = [t for t in txns if from_dt <= datetime.fromisoformat(t["date"]).replace(day=1) <= to_dt]
-            range_label = f"{self.from_month.get()} {fy} – {self.to_month.get()} {ty}"
-            self._current_month = None  # range mode, no single month for filter
+            mt = [t for t in txns
+                  if from_dt <= datetime.fromisoformat(t["date"]).replace(day=1) <= to_dt]
+            self._current_month = None
             self._current_year  = None
+            return mt, f"{self.from_month.get()} {fy} – {self.to_month.get()} {ty}", "month"
 
-        income =sum(t["amount"] for t in mt if t["type"]=="income")
-        expense=sum(t["amount"] for t in mt if t["type"]=="expense")
+    def refresh(self):
+        for w in self.chart_area.winfo_children(): w.destroy()
+        self.chart_area.configure(bg=T["BG"])
 
-        row=tk.Frame(self.chart_area,bg=T["BG"]); row.pack(fill="x",pady=(0,10))
+        mt, range_label, x_mode = self._get_filtered()
+        income  = sum(t["amount"] for t in mt if t["type"] == "income")
+        expense = sum(t["amount"] for t in mt if t["type"] == "expense")
+
+        # ── Summary cards ─────────────────────────────────────────
+        row = tk.Frame(self.chart_area, bg=T["BG"]); row.pack(fill="x", pady=(0,10))
         tk.Label(row, text=range_label, font=FNT_B, bg=T["BG"], fg=T["SUBTEXT"]).pack(side="left", padx=6)
-        for title,val,col in [("Money In 🙏",income,"#7DC99A"),
-                               ("Money Gone 💀",expense,"#E07A7A"),
-                               ("What's Left 😬",income-expense,T["ACCENT"])]:
-            c=tk.Frame(row,bg=T["WHITE"],highlightbackground=T["BORDER"],
-                       highlightthickness=1,padx=16,pady=10)
-            c.pack(side="left",expand=True,fill="both",padx=6)
-            tk.Label(c,text=title,font=FNT,bg=T["WHITE"],fg=T["SUBTEXT"]).pack()
-            tk.Label(c,text=f"${val:,.2f}",font=FNT_BIG,bg=T["WHITE"],fg=col).pack()
+        for title, val, col in [("Money In 🙏", income, "#7DC99A"),
+                                 ("Money Gone 💀", expense, "#E07A7A"),
+                                 ("What's Left 😬", income-expense, T["ACCENT"])]:
+            c = tk.Frame(row, bg=T["WHITE"], highlightbackground=T["BORDER"],
+                         highlightthickness=1, padx=16, pady=10)
+            c.pack(side="left", expand=True, fill="both", padx=6)
+            tk.Label(c, text=title, font=FNT, bg=T["WHITE"], fg=T["SUBTEXT"]).pack()
+            tk.Label(c, text=f"${val:,.2f}", font=FNT_BIG, bg=T["WHITE"], fg=col).pack()
 
-        exp_by_cat={}
+        # ── Expense by category ───────────────────────────────────
+        exp_by_cat = {}
         for t in mt:
-            if t["type"]=="expense":
-                exp_by_cat[t["category"]]=exp_by_cat.get(t["category"],0)+t["amount"]
+            if t["type"] == "expense":
+                exp_by_cat[t["category"]] = exp_by_cat.get(t["category"], 0) + t["amount"]
 
-        fig=Figure(figsize=(9,3.4),facecolor=T["BG"])
-        ax1=fig.add_subplot(121)
+        # ── Build line plot data ──────────────────────────────────
+        # x_mode "day" → x = day-of-month, x_mode "month" → x = (year,month) bucket
+        if x_mode == "day":
+            bucket_e = {}; bucket_i = {}
+            for t in mt:
+                d = datetime.fromisoformat(t["date"]).day
+                if t["type"] == "expense": bucket_e[d] = bucket_e.get(d,0) + t["amount"]
+                else:                      bucket_i[d] = bucket_i.get(d,0) + t["amount"]
+            all_keys = sorted(set(list(bucket_e) + list(bucket_i)))
+            x_labels = [str(k) for k in all_keys]
+            e_vals   = [bucket_e.get(k,0) for k in all_keys]
+            i_vals   = [bucket_i.get(k,0) for k in all_keys]
+            line_title = "Daily Spending"
+        else:
+            bucket_e = {}; bucket_i = {}
+            for t in mt:
+                dt = datetime.fromisoformat(t["date"])
+                key = (dt.year, dt.month)
+                if t["type"] == "expense": bucket_e[key] = bucket_e.get(key,0) + t["amount"]
+                else:                      bucket_i[key] = bucket_i.get(key,0) + t["amount"]
+            all_keys = sorted(set(list(bucket_e) + list(bucket_i)))
+            x_labels = [f"{MONTHS[k[1]-1][:3]}'{str(k[0])[2:]}" for k in all_keys]
+            e_vals   = [bucket_e.get(k,0) for k in all_keys]
+            i_vals   = [bucket_i.get(k,0) for k in all_keys]
+            line_title = "Monthly Spending"
+
+        # ── Figure ────────────────────────────────────────────────
+        fig = Figure(figsize=(9, 3.4), facecolor=T["BG"])
+        ax1 = fig.add_subplot(121)
+
+        # PIE CHART
+        labels = list(exp_by_cat.keys())
+        vals   = list(exp_by_cat.values())
         if exp_by_cat:
-            labels=list(exp_by_cat.keys())
-            vals=list(exp_by_cat.values())
-            clean_labels=[strip_emoji(l) for l in labels]
-            # Fixed high-contrast palette — consistent per category across all months/themes
-            CAT_COLORS = [
-                "#FF6B9D","#45B7D1","#FFA500","#96CEB4","#DDA0DD",
-                "#F7DC6F","#E74C3C","#3498DB","#2ECC71","#E67E22",
-                "#9B59B6","#1ABC9C","#E91E63","#00BCD4",
-            ]
-            cat_colors = [CAT_COLORS[CATEGORIES.index(l) % len(CAT_COLORS)]
-                          if l in CATEGORIES else CAT_COLORS[0] for l in labels]
-            ax1.pie(vals,labels=None,colors=cat_colors,autopct="%1.0f%%",
-                    startangle=140,wedgeprops={"edgecolor":"white","linewidth":2},
+            clean_labels = [strip_emoji(l) for l in labels]
+            cat_colors = [self.CAT_COLORS[CATEGORIES.index(l) % len(self.CAT_COLORS)]
+                          if l in CATEGORIES else self.CAT_COLORS[0] for l in labels]
+            ax1.pie(vals, labels=None, colors=cat_colors, autopct="%1.0f%%",
+                    startangle=140, wedgeprops={"edgecolor":"white","linewidth":2},
                     textprops={"fontsize":8,"color":T["TEXT"]})
-            ax1.legend(clean_labels,loc="lower center",bbox_to_anchor=(0.5,-0.35),
-                       fontsize=7,ncol=2,frameon=False,labelcolor=T["TEXT"])
-            ax1.set_title("Crimes by Category",color=T["TEXT"],fontsize=11,pad=10)
+            ax1.legend(clean_labels, loc="lower center", bbox_to_anchor=(0.5,-0.35),
+                       fontsize=7, ncol=2, frameon=False, labelcolor=T["TEXT"])
+            ax1.set_title("Crimes by Category", color=T["TEXT"], fontsize=11, pad=10)
             ax1.set_facecolor(T["BG"])
         else:
-            ax1.text(0.5,0.5,"No expenses yet!",
-                     ha="center",va="center",color=T["SUBTEXT"],fontsize=10)
+            ax1.text(0.5, 0.5, "No expenses yet!", ha="center", va="center",
+                     color=T["SUBTEXT"], fontsize=10)
             ax1.axis("off")
 
-        ax2=fig.add_subplot(122)
-        days_e={}; days_i={}
-        for t in mt:
-            d=datetime.fromisoformat(t["date"]).day
-            if t["type"]=="expense": days_e[d]=days_e.get(d,0)+t["amount"]
-            else:                    days_i[d]=days_i.get(d,0)+t["amount"]
-        if days_e or days_i:
-            all_days=sorted(set(list(days_e)+list(days_i)))
-            x=range(len(all_days))
-            ax2.bar(x,[days_e.get(d,0) for d in all_days],color=T["ACCENT2"],
-                    label="Expenses",width=0.5)
-            ax2.bar(x,[days_i.get(d,0) for d in all_days],color="#A8D8A8",
-                    label="Money In",width=0.3,alpha=0.8)
-            ax2.set_xticks(list(x))
-            ax2.set_xticklabels([str(d) for d in all_days],fontsize=7,color=T["TEXT"])
+        # LINE PLOT
+        ax2 = fig.add_subplot(122)
+        if all_keys:
+            xs = list(range(len(all_keys)))
+            if any(v > 0 for v in e_vals):
+                ax2.plot(xs, e_vals, color=T["ACCENT2"], marker="o", markersize=4,
+                         linewidth=2, label="Expenses")
+                ax2.fill_between(xs, e_vals, alpha=0.12, color=T["ACCENT2"])
+            if any(v > 0 for v in i_vals):
+                ax2.plot(xs, i_vals, color="#7DC99A", marker="o", markersize=4,
+                         linewidth=2, label="Income")
+                ax2.fill_between(xs, i_vals, alpha=0.10, color="#7DC99A")
+            ax2.set_xticks(xs)
+            tick_labels = x_labels if len(x_labels) <= 20 else                           [x_labels[i] if i % max(1, len(x_labels)//12) == 0 else "" for i in range(len(x_labels))]
+            ax2.set_xticklabels(tick_labels, fontsize=7, color=T["TEXT"], rotation=45 if len(x_labels)>10 else 0)
             ax2.set_facecolor(T["BG"])
-            ax2.tick_params(axis="y",labelcolor=T["TEXT"],labelsize=7)
+            ax2.tick_params(axis="y", labelcolor=T["TEXT"], labelsize=7)
             ax2.spines[:].set_edgecolor(T["BORDER"])
-            ax2.legend(fontsize=7,frameon=False,labelcolor=T["TEXT"])
-            ax2.set_title("Daily Damage Report",color=T["TEXT"],fontsize=11)
+            ax2.legend(fontsize=7, frameon=False, labelcolor=T["TEXT"])
+            ax2.set_title(line_title, color=T["TEXT"], fontsize=11)
+            ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda v,_: f"${v:,.0f}"))
         else:
-            ax2.text(0.5,0.5,"Nothing here yet...",
-                     ha="center",va="center",color=T["SUBTEXT"],fontsize=10)
+            ax2.text(0.5, 0.5, "Nothing here yet...", ha="center", va="center",
+                     color=T["SUBTEXT"], fontsize=10)
             ax2.axis("off")
 
         fig.tight_layout(pad=2)
-        canvas=FigureCanvasTkAgg(fig,self.chart_area)
+        canvas = FigureCanvasTkAgg(fig, self.chart_area)
         canvas.draw()
-        canvas.get_tk_widget().pack(fill="both",expand=True)
+        canvas.get_tk_widget().pack(fill="both", expand=True)
 
         # ── Hover tooltip ─────────────────────────────────────────
         tooltip = tk.Label(self.chart_area, text="", font=FNT_S,
-                           bg="#2D2D2D", fg="white", padx=8, pady=4,
-                           relief="flat", bd=0)
+                           bg="#2D2D2D", fg="white", padx=8, pady=4, relief="flat", bd=0)
 
-        # Build day->transactions lookup for bar chart
-        day_txns = {}
+        # Build key→transactions lookup for line hover
+        key_txns = {}
         for t in mt:
-            d = datetime.fromisoformat(t["date"]).day
-            day_txns.setdefault(d, []).append(t)
+            dt = datetime.fromisoformat(t["date"])
+            k = dt.day if x_mode == "day" else (dt.year, dt.month)
+            key_txns.setdefault(k, []).append(t)
 
-        wedges = [c for c in ax1.get_children()
-                  if hasattr(c, "get_path") and hasattr(c, "get_facecolor")
-                  and c.__class__.__name__ == "FancyArrow" or
-                  c.__class__.__name__ == "Wedge"]
-        # get actual wedges from pie
         pie_wedges = [c for c in ax1.get_children() if c.__class__.__name__ == "Wedge"]
 
         def on_hover(event):
             tooltip.place_forget()
-            if event.inaxes is None:
-                return
-            # ── Pie chart hover ───────────────────────────────────
+            if event.inaxes is None: return
+            # Pie hover
             if event.inaxes == ax1 and exp_by_cat:
                 for i, wedge in enumerate(pie_wedges):
                     if wedge.contains_point([event.x, event.y]):
-                        cat   = labels[i]
-                        amt   = vals[i]
                         total = sum(vals)
-                        pct   = amt / total * 100 if total else 0
-                        tip_text = cat + "\n$" + f"{amt:,.2f}" + f"  ({pct:.1f}%)"
-                        tooltip.configure(text=tip_text)
-                        x = int(event.x) + 12
-                        y = int(canvas.get_tk_widget().winfo_height() - event.y) + 12
-                        tooltip.place(x=x, y=y)
+                        pct = vals[i]/total*100 if total else 0
+                        tooltip.configure(text=f"{labels[i]}\n${vals[i]:,.2f}  ({pct:.1f}%)")
+                        tooltip.place(x=int(event.x)+12,
+                                      y=int(canvas.get_tk_widget().winfo_height()-event.y)+12)
                         return
-            # ── Bar chart hover ───────────────────────────────────
-            if event.inaxes == ax2 and (days_e or days_i):
-                # find nearest bar by x position
-                if ax2.patches:
-                    for bar in ax2.patches:
-                        if bar.get_x() <= event.xdata <= bar.get_x() + bar.get_width():
-                            bar_idx = round(bar.get_x() + bar.get_width() / 2 - 0.1)
-                            if 0 <= bar_idx < len(all_days):
-                                day = all_days[bar_idx]
-                                txns_day = day_txns.get(day, [])
-                                if not txns_day:
-                                    return
-                                lines = [f"── Day {day} ──"]
-                                for t in sorted(txns_day, key=lambda t: t["amount"], reverse=True)[:8]:
-                                    sign = "+" if t["type"] == "income" else "-"
-                                    note = t.get("note","") or strip_emoji(t["category"])
-                                    note = note[:22] + "…" if len(note) > 22 else note
-                                    lines.append(f"{sign}${t['amount']:.2f}  {note}")
-                                if len(txns_day) > 8:
-                                    lines.append(f"…+{len(txns_day)-8} more")
-                                tooltip.configure(text="\n".join(lines))
-                                x = int(event.x) + 12
-                                y = int(canvas.get_tk_widget().winfo_height() - event.y) + 12
-                                tooltip.place(x=x, y=y)
-                                return
+            # Line plot hover — find nearest point by x
+            if event.inaxes == ax2 and all_keys and event.xdata is not None:
+                xi = int(round(event.xdata))
+                if 0 <= xi < len(all_keys):
+                    k = all_keys[xi]
+                    txns_pt = key_txns.get(k, [])
+                    if not txns_pt: return
+                    hdr = f"── {x_labels[xi]} ──"
+                    lines = [hdr]
+                    for t in sorted(txns_pt, key=lambda t: t["amount"], reverse=True)[:8]:
+                        sign = "+" if t["type"] == "income" else "-"
+                        note = t.get("note","") or strip_emoji(t["category"])
+                        note = note[:22]+"…" if len(note)>22 else note
+                        lines.append(f"{sign}${t['amount']:.2f}  {note}")
+                    if len(txns_pt) > 8: lines.append(f"…+{len(txns_pt)-8} more")
+                    tooltip.configure(text="\n".join(lines))
+                    tooltip.place(x=int(event.x)+12,
+                                  y=int(canvas.get_tk_widget().winfo_height()-event.y)+12)
+                    return
             tooltip.place_forget()
 
         canvas.mpl_connect("motion_notify_event", on_hover)
 
-        # ── Pie click → navigate to Damage tab filtered by category ──
+        # Pie click → navigate to transactions filtered by category
         def on_click(event):
             if event.inaxes != ax1 or not exp_by_cat: return
             for i, wedge in enumerate(pie_wedges):
                 if wedge.contains_point([event.x, event.y]):
-                    cat = labels[i]
-                    # Set filter on TransactionsFrame
-                    txn_frame = self.app.frames["transactions"]
-                    txn_frame.filter_cat.set(cat)
-                    # If single month, also set a month label in title area
+                    self.app.frames["transactions"].filter_cat.set(labels[i])
                     self.app.show_frame("transactions")
                     return
         canvas.mpl_connect("button_press_event", on_click)
