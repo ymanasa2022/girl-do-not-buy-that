@@ -92,7 +92,6 @@ CATEGORIES = ["🛍️ Shopping","🍔 Restaurants","🫑 Grocery","💅 Self-ca
 # All keys must be LOWERCASE — map_cat lowercases the raw value before matching
 APPLE_MAP = {
     "restaurants":    "🍔 Restaurants",
-    "restaurant":    "🍔 Restaurants",
     "groceries":      "🫑 Grocery",
     "grocery":        "🫑 Grocery",
     "shopping":       "🛍️ Shopping",
@@ -100,13 +99,11 @@ APPLE_MAP = {
     "travel":         "✈️ Travel",
     "transportation": "🚗 Transport",
     "transport":      "🚗 Transport",
-    "gas":      "🚗 Transport",
     "health":         "🏥 Medical",
     "medical":        "🏥 Medical",
     "parking":        "🅿️ Parking",
     "utilities":      "💡 Utilities",
     "subscriptions":  "🔂 Subscriptions",
-    "subscription":  "🔂 Subscriptions",
     "self care":      "💅 Self-care",
     "personal care":  "💅 Self-care",
     "gifts":          "🎁 Gifts",
@@ -699,6 +696,34 @@ class TransactionsFrame(tk.Frame):
 
 
 # ══════════════════════════════════════════════════════════════════
+# Skip phrases for payments TOWARD credit cards (debit statement)
+CREDIT_CARD_PAYMENT_PHRASES = [
+    "chase credit crd", "applecard gsbank", "apple card gsbank",
+    "citi card", "amex payment", "discover payment",
+    "credit card payment", "credit card autopay",
+    "automatic payment", "autopay",
+]
+
+def detect_csv_format(path):
+    """Sniff CSV headers to auto-detect statement format."""
+    try:
+        with open(path, newline="", encoding="utf-8-sig") as f:
+            for _ in range(8):
+                line = f.readline().lower()
+                if "transaction date" in line and "description" in line:
+                    return "credit"
+                if "posting date" in line and "details" in line:
+                    return "debit"
+                if "datetime" in line and "from" in line and "to" in line:
+                    return "venmo"
+    except Exception:
+        pass
+    return "credit"
+
+def clean_venmo_note(note):
+    return re.sub(r"[^\x00-\x7F]+", "", note).strip() or "Venmo"
+
+
 class ImportCSVFrame(tk.Frame):
     def __init__(self, parent, app):
         super().__init__(parent, bg=T["BG"])
@@ -708,15 +733,20 @@ class ImportCSVFrame(tk.Frame):
     def _build(self):
         tk.Label(self, text="📥 Drop the Evidence, Bestie", font=FNT_TITLE,
                  bg=T["BG"], fg=T["TEXT"]).pack(pady=(18,4))
-        info = tk.Frame(self, bg=T["WHITE"], highlightbackground=T["BORDER"],
-                        highlightthickness=1, padx=22, pady=14)
-        info.pack(fill="x", padx=28, pady=(0,6))
-        tk.Label(info, text="💡 Your CSV should have these columns:",
-                 font=FNT_B, bg=T["WHITE"], fg=T["TEXT"]).pack(anchor="w")
-        tk.Label(info, text="  Transaction Date  •  Description  •  Merchant  •  Category  •  Type  •  Amount",
-                 font=FNT, bg=T["WHITE"], fg=T["SUBTEXT"]).pack(anchor="w")
-        tk.Label(info, text="  Negatives = you spent it. Positives = you earned it. Simple math, queen 👑",
-                 font=FNT_S, bg=T["WHITE"], fg=T["SUBTEXT"]).pack(anchor="w", pady=(2,0))
+
+        # ── Statement type selector ───────────────────────────────
+        type_f = tk.Frame(self, bg=T["WHITE"], highlightbackground=T["BORDER"],
+                          highlightthickness=1, padx=22, pady=12)
+        type_f.pack(fill="x", padx=28, pady=(0,6))
+        tk.Label(type_f, text="Statement type:", font=FNT_B,
+                 bg=T["WHITE"], fg=T["TEXT"]).pack(side="left")
+        self.fmt_var = tk.StringVar(value="auto")
+        for val, lbl in [("auto","🔍 Auto-detect"),("credit","💳 Credit Card"),
+                         ("debit","🏦 Debit / Bank"),("venmo","💸 Venmo")]:
+            tk.Radiobutton(type_f, text=lbl, variable=self.fmt_var, value=val,
+                           font=FNT, bg=T["WHITE"], fg=T["TEXT"],
+                           selectcolor=T["ACCENT2"], activebackground=T["WHITE"]
+                           ).pack(side="left", padx=10)
 
         # ── Month/Year filter ──────────────────────────────────────
         filter_f = tk.Frame(self, bg=T["BG"]); filter_f.pack(pady=(6,2))
@@ -729,7 +759,7 @@ class ImportCSVFrame(tk.Frame):
         ttk.Combobox(filter_f, textvariable=self.filter_year,
                      values=list(range(2020, now.year+2)),
                      width=7, state="readonly", font=FNT).pack(side="left", padx=4)
-        tk.Label(filter_f, text="(only rows in this month will import)",
+        tk.Label(filter_f, text="(only rows in this month/year will import)",
                  font=FNT_S, bg=T["BG"], fg=T["SUBTEXT"]).pack(side="left", padx=8)
 
         br = tk.Frame(self, bg=T["BG"]); br.pack(pady=6)
@@ -739,17 +769,16 @@ class ImportCSVFrame(tk.Frame):
 
         self.status = tk.Label(self, text="", font=FNT, bg=T["BG"], fg=T["SUBTEXT"])
         self.status.pack()
-        # Unmatched category resolution panel (shown dynamically after load)
         self.unmatched_frame = tk.Frame(self, bg=T["BG"])
         self.unmatched_frame.pack(fill="x", padx=28, pady=(0,4))
-        self._cat_vars = {}  # raw_cat_name -> StringVar
+        self._cat_vars = {}
         tk.Label(self, text="Crime Scene Preview 🔍", font=FNT_B,
                  bg=T["BG"], fg=T["TEXT"]).pack(anchor="w", padx=28, pady=(8,2))
         wrap = tk.Frame(self, bg=T["BG"])
         wrap.pack(fill="both", expand=True, padx=28, pady=(0,8))
         cols = ("Date","Type","Category","Description/Merchant","Amount")
         self.tree = ttk.Treeview(wrap, columns=cols, show="headings", style="A.Treeview")
-        for col,w in zip(cols,[100,80,150,250,100]):
+        for col,w in zip(cols,[100,80,150,270,110]):
             self.tree.heading(col,text=col); self.tree.column(col,width=w,anchor="center")
         sb2 = ttk.Scrollbar(wrap, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=sb2.set)
@@ -765,202 +794,334 @@ class ImportCSVFrame(tk.Frame):
                filetypes=[("CSV files","*.csv"),("All files","*.*")])
         if path: self._load_csv(path)
 
+    # ── Category memory: maps description keyword → category ─────────
+    def _remember_cat(self, note, cat):
+        """Store description→category mapping for future auto-matching."""
+        mem = self.app.data.setdefault("cat_memory", {})
+        # Use first 3 meaningful words as key
+        words = re.sub(r"[^a-z0-9 ]", "", note.lower()).split()
+        key = " ".join(words[:3]) if words else note.lower()[:20]
+        if key and cat != "📦 Other":
+            mem[key] = cat
+            save_data(self.app.data)
+
+    def _lookup_cat_memory(self, note):
+        """Check if we've seen a similar description before."""
+        mem = self.app.data.get("cat_memory", {})
+        words = re.sub(r"[^a-z0-9 ]", "", note.lower()).split()
+        key = " ".join(words[:3]) if words else note.lower()[:20]
+        return mem.get(key)
+
+    def _parse_amount(self, raw):
+        raw = raw.replace("$", "").replace(",", "").replace("(", "-").replace(")", "").strip()
+        try: return float(raw)
+        except ValueError: return None
+
+    def _parse_date(self, raw):
+        for fmt in ["%m/%d/%y", "%m/%d/%Y", "%Y-%m-%d", "%Y-%m-%dT%H:%M:%S",
+                    "%d/%m/%Y", "%m-%d-%Y"]:
+            try: return datetime.strptime(raw[:10], fmt[:len(raw[:10])]).isoformat()
+            except: pass
+        # ISO with time
+        try: return datetime.fromisoformat(raw).isoformat()
+        except: return None
+
     def _load_csv(self, path):
         self.preview_data = []
         for row in self.tree.get_children(): self.tree.delete(row)
-
-        # Determine filter month/year
         target_month = MONTHS.index(self.filter_month.get()) + 1
         target_year  = int(self.filter_year.get())
 
-        # Phrases in Description that mean "bank payment to credit card" → skip entirely
-        SKIP_DESC_PHRASES = [
-            "ach deposit internet transfer from account ending",
-            "ach deposit",
-            "internet transfer from account",
-            "automatic payment",
-            "autopay",
-            "online payment",
-            "mobile payment",
-        ]
+        fmt = self.fmt_var.get()
+        if fmt == "auto":
+            fmt = detect_csv_format(path)
+            self.fmt_var.set(fmt)
 
         try:
-            with open(path, newline="", encoding="utf-8-sig") as f:
-                reader = csv.DictReader(f)
-                hmap = {h.lower().strip():h for h in (reader.fieldnames or [])}
-                def get(row,*keys):
-                    for k in keys:
-                        for hk,orig in hmap.items():
-                            if k in hk: return row.get(orig,"").strip()
-                    return ""
-                count = skipped = ignored = 0
-                for row in reader:
-                    amt_raw = get(row,"amount")  # matches "Amount (USD)" via substring
-                    if not amt_raw: continue
-                    try: amount = float(amt_raw.replace("$","").replace(",",""))
-                    except ValueError: continue
-
-                    # Get merchant first (Apple Card has a clean Merchant column)
-                    merchant = get(row,"merchant")
-                    note     = merchant if merchant else get(row,"description")
-                    note_low = note.lower()
-
-                    # ── Apple Card CSV type logic ─────────────────────────────
-                    # Type column values from Apple Card:
-                    #   "Payment"  = credit card purchase (you spent money) → expense
-                    #   "Debit"    = Apple Cash Back credited to you       → income
-                    # ACH Deposit / bank transfers to pay the card         → SKIP
-                    if any(phrase in note_low for phrase in SKIP_DESC_PHRASES):
-                        ignored += 1
-                        continue
-
-                    tl = get(row,"type","transaction type").strip()
-                    tl_low = tl.lower()
-
-                    # Expense types — always treat amount as negative (spent)
-                    EXPENSE_TYPES = {"payment","purchase","sale","debit"}
-                    # Income types — always treat amount as positive (received)
-                    INCOME_TYPES  = {"return","credit","refund"}
-
-                    if tl_low in EXPENSE_TYPES:
-                        txn_type = "expense"
-                    elif tl_low in INCOME_TYPES:
-                        txn_type = "income"
-                    else:
-                        # Fallback: guess from sign of amount or keyword
-                        txn_type = "income" if ("credit" in tl_low) else "expense"
-
-                    amount = abs(amount)
-                    date_raw = get(row,"transaction date")
-                    date_iso = None
-                    # Apple Card uses M/D/YY (e.g. 1/26/26), try short year first
-                    for fmt in ["%m/%d/%y","%m/%d/%Y","%Y-%m-%d","%d/%m/%Y","%m-%d-%Y"]:
-                        try: date_iso=datetime.strptime(date_raw,fmt).isoformat(); break
-                        except: pass
-
-                    if not date_iso:
-                        ignored += 1
-                        continue
-
-                    # Filter by selected month/year
-                    row_dt = datetime.fromisoformat(date_iso)
-                    if row_dt.month != target_month or row_dt.year != target_year:
-                        skipped += 1
-                        continue
-
-                    unmatched_cats = set()
-                    raw_cat_val = get(row,"category")
-                    cat = map_cat(raw_cat_val, unmatched_cats)
-                    txn = {"date":date_iso,"type":txn_type,
-                           "category":cat,
-                           "note":note,"amount":amount,
-                           "_raw_cat": raw_cat_val if cat == "📦 Other" else None}
-                    self.preview_data.append(txn)
-                    sign = "+" if txn_type=="income" else "-"
-                    row_bg = "" if cat != "📦 Other" else ""
-                    self.tree.insert("","end", values=(date_iso[:10],txn_type.capitalize(),
-                                     cat,note,f"{sign}${amount:.2f}"))
-                    count += 1
-            # collect all unmatched across all rows
-            all_unmatched = set()
-            for txn in self.preview_data:
-                raw_cat = get({}, "category")  # placeholder — we re-check below
-            # re-scan preview rows for unmatched (tree already built, just need warning)
-            all_unmatched = set()
-            with open(path, newline="", encoding="utf-8-sig") as f2:
-                r2 = csv.DictReader(f2)
-                hmap2 = {h.lower().strip():h for h in (r2.fieldnames or [])}
-                def get2(row,*keys):
-                    for k in keys:
-                        for hk,orig in hmap2.items():
-                            if k in hk: return row.get(orig,"").strip()
-                    return ""
-                for row2 in r2:
-                    map_cat(get2(row2,"category"), all_unmatched)
+            if fmt == "credit":
+                count, ignored, skipped = self._parse_credit(path, target_month, target_year)
+            elif fmt == "debit":
+                count, ignored, skipped = self._parse_debit(path, target_month, target_year)
+            elif fmt == "venmo":
+                count, ignored, skipped = self._parse_venmo(path, target_month, target_year)
+            else:
+                count, ignored, skipped = self._parse_credit(path, target_month, target_year)
 
             month_label = f"{self.filter_month.get()} {target_year}"
-            status_text = f"👀 {count} transactions for {month_label} loaded! ({ignored} bank transfers ignored, {skipped} other months skipped). Hit Import!"
-            self.status.configure(text=status_text, fg="#7DC99A")
-
-            # Clear old resolution widgets
-            for w in self.unmatched_frame.winfo_children(): w.destroy()
-            self._cat_vars.clear()
-
-            # Show a row for every transaction that ended up as 📦 Other
-            other_txns = [(i, t) for i, t in enumerate(self.preview_data)
-                          if t["category"] == "📦 Other"]
-
-            if other_txns:
-                hdr_txt = f"⚠️ {len(other_txns)} transaction{'s' if len(other_txns)>1 else ''} landed in 📦 Other — assign categories below:"
-                tk.Label(self.unmatched_frame, text=hdr_txt,
-                         font=FNT_S, bg=T["BG"], fg="#E07A7A").pack(anchor="w", pady=(4,4))
-
-                # Scrollable container
-                outer = tk.Frame(self.unmatched_frame, bg=T["BG"],
-                                 highlightbackground=T["BORDER"], highlightthickness=1)
-                outer.pack(fill="x")
-                canvas_w = tk.Canvas(outer, bg=T["BG"], highlightthickness=0,
-                                     height=min(len(other_txns), 5) * 46)
-                vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas_w.yview)
-                canvas_w.configure(yscrollcommand=vsb.set)
-                vsb.pack(side="right", fill="y")
-                canvas_w.pack(side="left", fill="both", expand=True)
-                inner = tk.Frame(canvas_w, bg=T["BG"])
-                inner_id = canvas_w.create_window((0,0), window=inner, anchor="nw")
-                def _on_resize(e, c=canvas_w, iid=inner_id):
-                    c.itemconfig(iid, width=e.width)
-                canvas_w.bind("<Configure>", _on_resize)
-                inner.bind("<Configure>", lambda e, c=canvas_w:
-                           c.configure(scrollregion=c.bbox("all")))
-
-                # Column headers
-                hdr_row = tk.Frame(inner, bg=T["PANEL"], padx=10, pady=5)
-                hdr_row.pack(fill="x")
-                for htext, w in [("Date",11),("Type",9),("Amount",11),
-                                  ("Merchant / Note",32),("CSV Category",22),("  ",3),("Assign To",22)]:
-                    tk.Label(hdr_row, text=htext, font=FNT_S, bg=T["PANEL"],
-                             fg=T["SUBTEXT"], width=w, anchor="w").pack(side="left", padx=4)
-
-                for idx, (txn_i, t) in enumerate(other_txns):
-                    var = tk.StringVar(value="📦 Other")
-                    self._cat_vars[txn_i] = var
-                    row_bg = T["WHITE"] if idx % 2 == 0 else T["BG"]
-                    row_f = tk.Frame(inner, bg=row_bg, padx=10, pady=7)
-                    row_f.pack(fill="x")
-                    # Date
-                    tk.Label(row_f, text=t["date"][:10], font=FNT_S,
-                             bg=row_bg, fg=T["SUBTEXT"], width=11, anchor="w").pack(side="left")
-                    # Type badge
-                    type_col = "#7DC99A" if t["type"]=="income" else "#E07A7A"
-                    sign = "+" if t["type"]=="income" else "-"
-                    tk.Label(row_f, text=t["type"].capitalize(), font=FNT_S,
-                             bg=type_col, fg="#FFFFFF", padx=5, pady=1, width=7).pack(side="left", padx=4)
-                    # Amount
-                    tk.Label(row_f, text=f"{sign}${t['amount']:.2f}", font=FNT_B,
-                             bg=row_bg, fg=T["TEXT"], width=11, anchor="w").pack(side="left", padx=4)
-                    # Merchant/note
-                    note_txt = (t.get("note") or "—")[:32]
-                    tk.Label(row_f, text=note_txt, font=FNT_S,
-                             bg=row_bg, fg=T["TEXT"], width=32, anchor="w").pack(side="left", padx=4)
-                    # Raw CSV category
-                    raw_lbl = (t.get("_raw_cat") or "unrecognised")[:20]
-                    tk.Label(row_f, text=f'"{raw_lbl}"', font=FNT_S,
-                             bg=row_bg, fg="#E07A7A", width=22, anchor="w").pack(side="left", padx=4)
-                    tk.Label(row_f, text="→", font=FNT_S,
-                             bg=row_bg, fg=T["SUBTEXT"]).pack(side="left", padx=2)
-                    # Category picker
-                    cb = ttk.Combobox(row_f, textvariable=var,
-                                      values=CATEGORIES, width=22,
-                                      state="readonly", font=FNT_S)
-                    cb.pack(side="left", padx=4)
-                    var.trace_add("write", lambda *_, ti=txn_i, v=var: self._remap_cat_by_idx(ti, v.get()))
-
-                tk.Label(self.unmatched_frame,
-                         text="Changes apply instantly to the preview above ✨",
-                         font=FNT_S, bg=T["BG"], fg=T["SUBTEXT"]).pack(anchor="w", pady=(4,0))
+            self.status.configure(
+                text=f"👀 {count} transactions loaded ({fmt} format)! "
+                     f"{ignored} skipped (payments/transfers), {skipped} other months. Hit Import!",
+                fg="#7DC99A")
+            self._show_unmatched_panel()
         except Exception as e:
-            messagebox.showerror("Error",f"Could not read CSV:\n{e}")
+            messagebox.showerror("Error", f"Could not read CSV:\n{e}")
             self.status.configure(text="❌ File refused to cooperate. Typical. 😤", fg="#E07A7A")
+
+    def _add_txn(self, date_iso, txn_type, note, amount, raw_cat, target_month, target_year):
+        """Validate date filter, apply category memory, append to preview."""
+        row_dt = datetime.fromisoformat(date_iso)
+        if row_dt.month != target_month or row_dt.year != target_year:
+            return "skipped"
+        # Check category memory first, then APPLE_MAP, then Other
+        cat = self._lookup_cat_memory(note)
+        if not cat:
+            cat = map_cat(raw_cat)
+        raw_for_panel = None
+        if cat == "📦 Other":
+            raw_for_panel = raw_cat or note[:30]
+        txn = {"date": date_iso, "type": txn_type, "category": cat,
+               "note": note, "amount": abs(amount), "_raw_cat": raw_for_panel}
+        self.preview_data.append(txn)
+        sign = "+" if txn_type == "income" else "-"
+        self.tree.insert("", "end", values=(
+            date_iso[:10], txn_type.capitalize(), cat, note, f"{sign}${abs(amount):.2f}"))
+        return "added"
+
+    def _parse_credit(self, path, target_month, target_year):
+        """
+        Credit card CSV:
+        Transaction Date, Post Date, Description, Category, Type, Amount
+        Type: Sale/Purchase/Debit → expense | Return/Credit/Refund → income
+        Amount is already signed (negative = expense)
+        """
+        SKIP_TYPES  = set()  # credit cards don't have bank transfer rows
+        SKIP_DESCS  = ["automatic payment", "autopay", "online payment",
+                       "mobile payment", "ach payment"]
+        count = ignored = skipped = 0
+        with open(path, newline="", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            hmap = {h.lower().strip(): h for h in (reader.fieldnames or [])}
+            def get(*keys):
+                for k in keys:
+                    for hk, orig in hmap.items():
+                        if k in hk: return lambda row, o=orig: row.get(o, "").strip()
+                return lambda row: ""
+            get_date  = get("transaction date", "date")
+            get_desc  = get("description", "merchant")
+            get_cat   = get("category")
+            get_type  = get("type")
+            get_amt   = get("amount")
+            for row in reader:
+                amt = self._parse_amount(get_amt(row))
+                if amt is None: continue
+                note = get_desc(row)
+                if not note: continue
+                if any(p in note.lower() for p in SKIP_DESCS):
+                    ignored += 1; continue
+                tl = get_type(row).lower()
+                if tl in {"sale","purchase","debit","payment"}:
+                    txn_type = "expense"
+                elif tl in {"return","credit","refund"}:
+                    txn_type = "income"
+                else:
+                    txn_type = "income" if amt > 0 else "expense"
+                date_iso = self._parse_date(get_date(row))
+                if not date_iso: ignored += 1; continue
+                r = self._add_txn(date_iso, txn_type, note, amt, get_cat(row),
+                                  target_month, target_year)
+                if r == "added": count += 1
+                else: skipped += 1
+        return count, ignored, skipped
+
+    def _parse_debit(self, path, target_month, target_year):
+        """
+        Bank/Debit CSV:
+        Details, Posting Date, Description, Amount, Type, Balance
+        Details=DEBIT → expense, Details=CREDIT → income
+        Skip payments toward credit cards.
+        """
+        SKIP_DESCS = CREDIT_CARD_PAYMENT_PHRASES + [
+            "zelle payment to", "external transfer",
+            "ach deposit", "internet transfer",
+        ]
+        count = ignored = skipped = 0
+        with open(path, newline="", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            hmap = {h.lower().strip(): h for h in (reader.fieldnames or [])}
+            def get(*keys):
+                for k in keys:
+                    for hk, orig in hmap.items():
+                        if k in hk: return lambda row, o=orig: row.get(o, "").strip()
+                return lambda row: ""
+            get_details = get("details")
+            get_date    = get("posting date", "date")
+            get_desc    = get("description")
+            get_amt     = get("amount")
+            for row in reader:
+                amt = self._parse_amount(get_amt(row))
+                if amt is None: continue
+                note = get_desc(row).strip()
+                # Collapse whitespace (Chase descriptions have tons of spaces)
+                note = re.sub(r"\s+", " ", note)
+                if not note: continue
+                note_low = note.lower()
+                # Skip credit card payments (already counted as expenses)
+                if any(p in note_low for p in SKIP_DESCS):
+                    ignored += 1; continue
+                details = get_details(row).upper()
+                if details == "CREDIT":
+                    txn_type = "income"
+                elif details == "DEBIT":
+                    txn_type = "expense"
+                else:
+                    txn_type = "income" if amt > 0 else "expense"
+                date_iso = self._parse_date(get_date(row))
+                if not date_iso: ignored += 1; continue
+                r = self._add_txn(date_iso, txn_type, note, amt, "",
+                                  target_month, target_year)
+                if r == "added": count += 1
+                else: skipped += 1
+        return count, ignored, skipped
+
+    def _parse_venmo(self, path, target_month, target_year):
+        """
+        Venmo CSV: skip junk header rows, find the data section.
+        From=someone else, To=you → income
+        From=you, To=someone else → expense
+        Amount in parens = negative (expense)
+        Skip rows that duplicate bank statement (funded from bank account).
+        """
+        MY_NAME_HINTS = ["manasa", "yadavalli"]  # adapt from account header if possible
+        count = ignored = skipped = 0
+
+        # First pass: try to extract account name from file header
+        my_name = ""
+        with open(path, newline="", encoding="utf-8-sig") as f:
+            for _ in range(4):
+                line = f.readline()
+                m = re.search(r"@([\w-]+)", line)
+                if m:
+                    my_name = m.group(1).lower().replace("-", " ")
+                    break
+
+        with open(path, newline="", encoding="utf-8-sig") as f:
+            content_lines = f.readlines()
+
+        # Find the header row (contains "Datetime")
+        header_idx = None
+        for i, line in enumerate(content_lines):
+            if "datetime" in line.lower() and "from" in line.lower():
+                header_idx = i
+                break
+        if header_idx is None:
+            return 0, 0, 0
+
+        import io
+        data_block = "".join(content_lines[header_idx:])
+        reader = csv.DictReader(io.StringIO(data_block))
+        hmap = {h.lower().strip(): h for h in (reader.fieldnames or [])}
+        def get(*keys):
+            for k in keys:
+                for hk, orig in hmap.items():
+                    if k in hk: return lambda row, o=orig: row.get(o, "").strip()
+            return lambda row: ""
+        get_dt     = get("datetime")
+        get_from   = get("from")
+        get_to     = get("to")
+        get_amt    = get("amount (total)", "amount")
+        get_note   = get("note")
+        get_status = get("status")
+        get_fund   = get("funding source")
+
+        for row in reader:
+            if get_status(row).lower() != "complete":
+                continue
+            amt = self._parse_amount(get_amt(row))
+            if amt is None or amt == 0: continue
+
+            frm  = get_from(row).strip()
+            to   = get_to(row).strip()
+            note = clean_venmo_note(get_note(row)) or "Venmo"
+            fund = get_fund(row).lower()
+
+            # Skip rows already captured by bank statement
+            # (funded from a bank account = will show on bank debit statement)
+            if "checking" in fund or "chase" in fund or "bank" in fund:
+                ignored += 1; continue
+
+            # Determine direction: negative amount OR "To" = us means we paid
+            # Venmo uses parens for negative: ($40.00)
+            frm_low = frm.lower()
+            to_low  = to.lower()
+            is_mine_from = any(h in frm_low for h in (my_name.split() if my_name else MY_NAME_HINTS))
+            is_mine_to   = any(h in to_low  for h in (my_name.split() if my_name else MY_NAME_HINTS))
+
+            if amt < 0 or is_mine_from:
+                txn_type = "expense"
+                other_person = to
+            else:
+                txn_type = "income"
+                other_person = frm
+
+            full_note = f"{note} ({other_person})" if other_person else note
+
+            date_iso = self._parse_date(get_dt(row))
+            if not date_iso: ignored += 1; continue
+
+            r = self._add_txn(date_iso, txn_type, full_note, amt, "Venmo",
+                              target_month, target_year)
+            if r == "added": count += 1
+            else: skipped += 1
+        return count, ignored, skipped
+
+    def _show_unmatched_panel(self):
+        """Build the per-transaction category assignment panel for 📦 Other rows."""
+        for w in self.unmatched_frame.winfo_children(): w.destroy()
+        self._cat_vars.clear()
+        other_txns = [(i, t) for i, t in enumerate(self.preview_data)
+                      if t["category"] == "📦 Other"]
+        if not other_txns:
+            return
+        hdr_txt = f"⚠️ {len(other_txns)} transaction{'s' if len(other_txns)>1 else ''} landed in 📦 Other — assign categories below:"
+        tk.Label(self.unmatched_frame, text=hdr_txt,
+                 font=FNT_S, bg=T["BG"], fg="#E07A7A").pack(anchor="w", pady=(4,2))
+        outer = tk.Frame(self.unmatched_frame, bg=T["BG"],
+                         highlightbackground=T["BORDER"], highlightthickness=1)
+        outer.pack(fill="x")
+        canvas_w = tk.Canvas(outer, bg=T["BG"], highlightthickness=0,
+                             height=min(len(other_txns), 5) * 46)
+        vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas_w.yview)
+        canvas_w.configure(yscrollcommand=vsb.set)
+        vsb.pack(side="right", fill="y")
+        canvas_w.pack(side="left", fill="both", expand=True)
+        inner = tk.Frame(canvas_w, bg=T["BG"])
+        inner_id = canvas_w.create_window((0,0), window=inner, anchor="nw")
+        canvas_w.bind("<Configure>", lambda e, c=canvas_w, iid=inner_id: c.itemconfig(iid, width=e.width))
+        inner.bind("<Configure>", lambda e, c=canvas_w: c.configure(scrollregion=c.bbox("all")))
+        # Column headers
+        hdr_row = tk.Frame(inner, bg=T["PANEL"], padx=10, pady=5)
+        hdr_row.pack(fill="x")
+        for htext, w in [("Date",11),("Type",9),("Amount",11),
+                          ("Merchant / Note",32),("CSV Category",22),("",3),("Assign To",22)]:
+            tk.Label(hdr_row, text=htext, font=FNT_S, bg=T["PANEL"],
+                     fg=T["SUBTEXT"], width=w or 2, anchor="w").pack(side="left", padx=4)
+        for idx, (txn_i, t) in enumerate(other_txns):
+            var = tk.StringVar(value="📦 Other")
+            self._cat_vars[txn_i] = var
+            row_bg = T["WHITE"] if idx % 2 == 0 else T["BG"]
+            row_f  = tk.Frame(inner, bg=row_bg, padx=10, pady=7)
+            row_f.pack(fill="x")
+            sign     = "+" if t["type"]=="income" else "-"
+            type_col = "#7DC99A" if t["type"]=="income" else "#E07A7A"
+            tk.Label(row_f, text=t["date"][:10], font=FNT_S,
+                     bg=row_bg, fg=T["SUBTEXT"], width=11, anchor="w").pack(side="left")
+            tk.Label(row_f, text=t["type"].capitalize(), font=FNT_S,
+                     bg=type_col, fg="#FFFFFF", padx=5, pady=1, width=7).pack(side="left", padx=4)
+            tk.Label(row_f, text=f"{sign}${t['amount']:.2f}", font=FNT_B,
+                     bg=row_bg, fg=T["TEXT"], width=11, anchor="w").pack(side="left", padx=4)
+            tk.Label(row_f, text=(t.get("note") or "—")[:32], font=FNT_S,
+                     bg=row_bg, fg=T["TEXT"], width=32, anchor="w").pack(side="left", padx=4)
+            tk.Label(row_f, text=(t.get("_raw_cat") or "—")[:22], font=FNT_S,
+                     bg=row_bg, fg="#E07A7A", width=22, anchor="w").pack(side="left", padx=4)
+            tk.Label(row_f, text="→", font=FNT_S, bg=row_bg,
+                     fg=T["SUBTEXT"]).pack(side="left", padx=2)
+            cb = ttk.Combobox(row_f, textvariable=var, values=CATEGORIES,
+                              width=22, state="readonly", font=FNT_S)
+            cb.pack(side="left", padx=4)
+            var.trace_add("write", lambda *_, ti=txn_i, v=var: self._remap_cat_by_idx(ti, v.get()))
+        tk.Label(self.unmatched_frame,
+                 text="Pick a category → preview updates instantly. Import saves your choices 🌸",
+                 font=FNT_S, bg=T["BG"], fg=T["SUBTEXT"]).pack(anchor="w", pady=(4,0))
 
     def _remap_cat_by_idx(self, txn_idx, new_cat):
         """Live-update a single transaction by its index in preview_data."""
@@ -984,12 +1145,23 @@ class ImportCSVFrame(tk.Frame):
         if not self.preview_data:
             messagebox.showinfo("Babe...","Bestie, you need to pick a file 😭"); return
         existing = {(t["date"][:10],t["note"],t["amount"]) for t in self.app.data["transactions"]}
-        added = 0
+        added = dupes = 0
+        mem = self.app.data.setdefault("cat_memory", {})
         for t in self.preview_data:
             key = (t["date"][:10],t["note"],t["amount"])
             if key not in existing:
                 clean = {k:v for k,v in t.items() if k != "_raw_cat"}
-                self.app.data["transactions"].append(clean); existing.add(key); added+=1
+                self.app.data["transactions"].append(clean)
+                existing.add(key)
+                added += 1
+                # Save category memory so similar descriptions auto-match next time
+                if t["category"] != "📦 Other" and t.get("note"):
+                    words = re.sub(r"[^a-z0-9 ]","",t["note"].lower()).split()
+                    mem_key = " ".join(words[:3]) if words else t["note"].lower()[:20]
+                    if mem_key:
+                        mem[mem_key] = t["category"]
+            else:
+                dupes += 1
         save_data(self.app.data)
         self.status.configure(
             text=f"🎉 Imported {added} transactions. No judgment. Okay a LITTLE judgment. ({len(self.preview_data)-added} dupes skipped 🙏)",
@@ -1541,7 +1713,7 @@ class SummaryFrame(tk.Frame):
                     startangle=140,wedgeprops={"edgecolor":"white","linewidth":2},
                     textprops={"fontsize":8,"color":T["TEXT"]})
             ax1.legend(clean_labels,loc="lower center",bbox_to_anchor=(0.5,-0.35),
-                       fontsize=10,ncol=2,frameon=False,labelcolor=T["TEXT"])
+                       fontsize=7,ncol=2,frameon=False,labelcolor=T["TEXT"])
             ax1.set_title("Crimes by Category",color=T["TEXT"],fontsize=11,pad=10)
             ax1.set_facecolor(T["BG"])
         else:
