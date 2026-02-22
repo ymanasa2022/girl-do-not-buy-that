@@ -707,15 +707,22 @@ CREDIT_CARD_PAYMENT_PHRASES = [
 def detect_csv_format(path):
     """Sniff CSV headers to auto-detect statement format."""
     try:
-        with open(path, newline="", encoding="utf-8-sig") as f:
-            for _ in range(8):
-                line = f.readline().lower()
-                if "transaction date" in line and "description" in line:
-                    return "credit"
-                if "posting date" in line and "details" in line:
-                    return "debit"
-                if "datetime" in line and "from" in line and "to" in line:
-                    return "venmo"
+        for enc in ("utf-8-sig", "utf-8", "latin-1"):
+            try:
+                with open(path, newline="", encoding=enc) as f:
+                    for _ in range(8):
+                        line = f.readline().lower()
+                        if "account statement" in line or ("datetime" in line and "funding source" in line):
+                            return "venmo"
+                        if "datetime" in line and "from" in line and "to" in line:
+                            return "venmo"
+                        if "transaction date" in line and "description" in line:
+                            return "credit"
+                        if "posting date" in line and "details" in line:
+                            return "debit"
+                break
+            except UnicodeDecodeError:
+                continue
     except Exception:
         pass
     return "credit"
@@ -766,6 +773,8 @@ class ImportCSVFrame(tk.Frame):
         btn(br, "📂 Upload the Receipts", self._browse).pack(side="left", padx=6)
         btn(br, "😤 Import All (Deep Breath)", self._import_all,
             color="#7DC99A", fg="#000000").pack(side="left", padx=6)
+        btn(br, "🔬 Debug File", self._debug_csv,
+            color="#888888", fg="#ffffff").pack(side="left", padx=6)
 
         self.status = tk.Label(self, text="", font=FNT, bg=T["BG"], fg=T["SUBTEXT"])
         self.status.pack()
@@ -789,12 +798,79 @@ class ImportCSVFrame(tk.Frame):
         for w in self.winfo_children(): w.destroy()
         self._build()
 
+
+    def _debug_csv(self):
+        import io as _io, csv as _csv, traceback as _tb
+        path = filedialog.askopenfilename(title="Select CSV to Debug",
+               filetypes=[("CSV files","*.csv"),("All files","*.*")])
+        if not path: return
+        out = [f"FILE: {path}"]
+        content_lines = None
+        for enc in ("utf-8-sig", "utf-8", "latin-1", "cp1252"):
+            try:
+                with open(path, newline="", encoding=enc) as f:
+                    content_lines = f.readlines()
+                out.append(f"Encoding OK: {enc} — {len(content_lines)} lines")
+                break
+            except UnicodeDecodeError as e:
+                out.append(f"  {enc}: FAILED")
+        if not content_lines:
+            messagebox.showerror("Debug", "No encoding worked"); return
+        out.append("First 5 lines:")
+        for i, line in enumerate(content_lines[:5]):
+            out.append(f"  [{i}] {repr(line[:100])}")
+        header_idx = None
+        for i, line in enumerate(content_lines):
+            ll = line.lower()
+            if "datetime" in ll and "from" in ll and "to" in ll:
+                header_idx = i
+                out.append(f"Header at line {i}: {repr(line[:80])}")
+                break
+        if header_idx is None:
+            out.append("NO HEADER FOUND - checking partial matches:")
+            for i, line in enumerate(content_lines):
+                ll = line.lower()
+                if "datetime" in ll or ("from" in ll and "to" in ll):
+                    out.append(f"  Line {i}: {repr(line[:80])}")
+        else:
+            data_block = "".join(content_lines[header_idx:])
+            reader = _csv.DictReader(_io.StringIO(data_block), delimiter="\t")
+            raw_fields = reader.fieldnames or []
+            clean_fields = [f.strip() if f else "" for f in raw_fields]
+            reader.fieldnames = clean_fields
+            out.append(f"Fields: {clean_fields[:12]}")
+            def gv(row, *keys):
+                for k in keys:
+                    for field in clean_fields:
+                        if field and k.lower() in field.lower():
+                            return row.get(field, "").strip()
+                return ""
+            out.append("Rows:")
+            for i, row in enumerate(reader):
+                s = gv(row, "status")
+                a = gv(row, "amount (total)", "amount")
+                d = gv(row, "datetime")
+                fr = gv(row, "from")
+                fn = gv(row, "funding source")
+                out.append(f"  [{i}] status={repr(s)} amt={repr(a)} dt={repr(d[:19])} from={repr(fr[:20])} fund={repr(fn[:25])}")
+        win = tk.Toplevel(self)
+        win.title("CSV Debug")
+        win.geometry("900x500")
+        txt = tk.Text(win, font=("Courier", 10), wrap="none")
+        sy = ttk.Scrollbar(win, orient="vertical", command=txt.yview)
+        sx = ttk.Scrollbar(win, orient="horizontal", command=txt.xview)
+        txt.configure(yscrollcommand=sy.set, xscrollcommand=sx.set)
+        sy.pack(side="right", fill="y")
+        sx.pack(side="bottom", fill="x")
+        txt.pack(fill="both", expand=True)
+        txt.insert("1.0", "\n".join(out))
+        txt.configure(state="disabled")
+
     def _browse(self):
         path = filedialog.askopenfilename(title="Select CSV",
                filetypes=[("CSV files","*.csv"),("All files","*.*")])
         if path: self._load_csv(path)
 
-    # ── Category memory: maps description keyword → category ─────────
     def _remember_cat(self, note, cat):
         """Store description→category mapping for future auto-matching."""
         mem = self.app.data.setdefault("cat_memory", {})
@@ -813,18 +889,25 @@ class ImportCSVFrame(tk.Frame):
         return mem.get(key)
 
     def _parse_amount(self, raw):
-        raw = raw.replace("$", "").replace(",", "").replace("(", "-").replace(")", "").strip()
+        # Handle: "$17.00", "($40.00)", "+ $17.00", "- $40.00", "-20.71"
+        raw = raw.replace("$", "").replace(",", "").replace("(", "-").replace(")", "")
+        raw = raw.replace("+ ", "").replace("- ", "-").strip()
         try: return float(raw)
         except ValueError: return None
 
     def _parse_date(self, raw):
-        for fmt in ["%m/%d/%y", "%m/%d/%Y", "%Y-%m-%d", "%Y-%m-%dT%H:%M:%S",
-                    "%d/%m/%Y", "%m-%d-%Y"]:
-            try: return datetime.strptime(raw[:10], fmt[:len(raw[:10])]).isoformat()
+        if not raw: return None
+        raw = raw.strip()
+        # Try ISO with time first (Venmo: 2026-02-02T16:32:19)
+        for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"]:
+            try: return datetime.strptime(raw, fmt).isoformat()
             except: pass
-        # ISO with time
-        try: return datetime.fromisoformat(raw).isoformat()
-        except: return None
+        # Try date-only slice for M/D/Y formats
+        date_part = raw[:10]
+        for fmt in ["%m/%d/%Y", "%m/%d/%y", "%d/%m/%Y", "%m-%d-%Y"]:
+            try: return datetime.strptime(date_part, fmt).isoformat()
+            except: pass
+        return None
 
     def _load_csv(self, path):
         self.preview_data = []
@@ -848,20 +931,19 @@ class ImportCSVFrame(tk.Frame):
                 count, ignored, skipped = self._parse_credit(path, target_month, target_year)
 
             month_label = f"{self.filter_month.get()} {target_year}"
+            m_label = f"{self.filter_month.get()} {int(self.filter_year.get())}"
             self.status.configure(
-                text=f"👀 {count} transactions loaded ({fmt} format)! "
-                     f"{ignored} skipped (payments/transfers), {skipped} other months. Hit Import!",
+                text=f"👀 {count} transactions loaded — {ignored} skipped (payments/transfers). "
+                     f"Hit Import to save {m_label} rows (dupes will be skipped automatically).",
                 fg="#7DC99A")
             self._show_unmatched_panel()
         except Exception as e:
-            messagebox.showerror("Error", f"Could not read CSV:\n{e}")
-            self.status.configure(text="❌ File refused to cooperate. Typical. 😤", fg="#E07A7A")
+            import traceback
+            messagebox.showerror("Error", f"Could not read CSV:\n{e}\n\n{traceback.format_exc()}")
+            self.status.configure(text=f"❌ Error: {e}", fg="#E07A7A")
 
     def _add_txn(self, date_iso, txn_type, note, amount, raw_cat, target_month, target_year):
-        """Validate date filter, apply category memory, append to preview."""
-        row_dt = datetime.fromisoformat(date_iso)
-        if row_dt.month != target_month or row_dt.year != target_year:
-            return "skipped"
+        """Always add to preview — month filter and dupe check happen at import time."""
         # Check category memory first, then APPLE_MAP, then Other
         cat = self._lookup_cat_memory(note)
         if not cat:
@@ -919,9 +1001,8 @@ class ImportCSVFrame(tk.Frame):
                 if not date_iso: ignored += 1; continue
                 r = self._add_txn(date_iso, txn_type, note, amt, get_cat(row),
                                   target_month, target_year)
-                if r == "added": count += 1
-                else: skipped += 1
-        return count, ignored, skipped
+                count += 1
+        return count, ignored, 0
 
     def _parse_debit(self, path, target_month, target_year):
         """
@@ -969,9 +1050,8 @@ class ImportCSVFrame(tk.Frame):
                 if not date_iso: ignored += 1; continue
                 r = self._add_txn(date_iso, txn_type, note, amt, "",
                                   target_month, target_year)
-                if r == "added": count += 1
-                else: skipped += 1
-        return count, ignored, skipped
+                count += 1
+        return count, ignored, 0
 
     def _parse_venmo(self, path, target_month, target_year):
         """
@@ -984,85 +1064,106 @@ class ImportCSVFrame(tk.Frame):
         MY_NAME_HINTS = ["manasa", "yadavalli"]  # adapt from account header if possible
         count = ignored = skipped = 0
 
-        # First pass: try to extract account name from file header
+        # Try multiple encodings — Venmo CSVs vary
+        content_lines = None
+        for enc in ("utf-8-sig", "utf-8", "latin-1", "cp1252"):
+            try:
+                with open(path, newline="", encoding=enc) as f:
+                    content_lines = f.readlines()
+                break
+            except UnicodeDecodeError:
+                continue
+        if not content_lines:
+            return 0, 0, 0
+
+        # Extract account name from header line (@handle)
         my_name = ""
-        with open(path, newline="", encoding="utf-8-sig") as f:
-            for _ in range(4):
-                line = f.readline()
-                m = re.search(r"@([\w-]+)", line)
-                if m:
-                    my_name = m.group(1).lower().replace("-", " ")
-                    break
+        for line in content_lines[:5]:
+            m = re.search(r"@([\w-]+)", line)
+            if m:
+                my_name = m.group(1).lower().replace("-", " ")
+                break
 
-        with open(path, newline="", encoding="utf-8-sig") as f:
-            content_lines = f.readlines()
-
-        # Find the header row (contains "Datetime")
+        # Find the header row — look for "Datetime" and "From" in same line
+        # Venmo TSV has tab-separated headers; check both raw and stripped
         header_idx = None
         for i, line in enumerate(content_lines):
-            if "datetime" in line.lower() and "from" in line.lower():
+            ll = line.lower()
+            if "datetime" in ll and "from" in ll and "to" in ll:
                 header_idx = i
                 break
+        if header_idx is None:
+            # Fallback: look for just "datetime"
+            for i, line in enumerate(content_lines):
+                if "datetime" in line.lower():
+                    header_idx = i
+                    break
         if header_idx is None:
             return 0, 0, 0
 
         import io
         data_block = "".join(content_lines[header_idx:])
-        reader = csv.DictReader(io.StringIO(data_block))
-        hmap = {h.lower().strip(): h for h in (reader.fieldnames or [])}
-        def get(*keys):
+        # Venmo exports are TAB-separated — must set delimiter
+        reader = csv.DictReader(io.StringIO(data_block))  # Venmo CSV is comma-separated
+        # Strip whitespace from field names (first column is blank in Venmo)
+        raw_fields = reader.fieldnames or []
+        clean_fields = [f.strip() if f else "" for f in raw_fields]
+        reader.fieldnames = clean_fields
+
+        def gv(row, *keys):
+            """Case-insensitive partial-key lookup for a TSV row."""
             for k in keys:
-                for hk, orig in hmap.items():
-                    if k in hk: return lambda row, o=orig: row.get(o, "").strip()
-            return lambda row: ""
-        get_dt     = get("datetime")
-        get_from   = get("from")
-        get_to     = get("to")
-        get_amt    = get("amount (total)", "amount")
-        get_note   = get("note")
-        get_status = get("status")
-        get_fund   = get("funding source")
+                for field in clean_fields:
+                    if field and k.lower() in field.lower():
+                        return row.get(field, "").strip()
+            return ""
 
+        row_num = 0
         for row in reader:
-            if get_status(row).lower() != "complete":
+            row_num += 1
+            status = gv(row, "status").lower()
+            amt_raw = gv(row, "amount (total)", "amount")
+            amt = self._parse_amount(amt_raw)
+            dt_raw = gv(row, "datetime")
+            fund = gv(row, "funding source").lower()
+            print(f"[Venmo row {row_num}] status={repr(status)} amt={repr(amt_raw)}->{amt} dt={repr(dt_raw[:19] if dt_raw else '')} fund={repr(fund[:20])}")
+
+            if status != "complete":
+                print(f"  -> skip: status not complete")
                 continue
-            amt = self._parse_amount(get_amt(row))
-            if amt is None or amt == 0: continue
+            if amt is None or amt == 0:
+                print(f"  -> skip: bad amount")
+                continue
+            if any(x in fund for x in ("checking", "chase", "bank", "jpmorgan")):
+                print(f"  -> skip: bank funded")
+                ignored += 1
+                continue
 
-            frm  = get_from(row).strip()
-            to   = get_to(row).strip()
-            note = clean_venmo_note(get_note(row)) or "Venmo"
-            fund = get_fund(row).lower()
+            frm  = gv(row, "from")
+            to   = gv(row, "to")
+            note = clean_venmo_note(gv(row, "note")) or "Venmo"
 
-            # Skip rows already captured by bank statement
-            # (funded from a bank account = will show on bank debit statement)
-            if "checking" in fund or "chase" in fund or "bank" in fund:
-                ignored += 1; continue
-
-            # Determine direction: negative amount OR "To" = us means we paid
-            # Venmo uses parens for negative: ($40.00)
-            frm_low = frm.lower()
-            to_low  = to.lower()
-            is_mine_from = any(h in frm_low for h in (my_name.split() if my_name else MY_NAME_HINTS))
-            is_mine_to   = any(h in to_low  for h in (my_name.split() if my_name else MY_NAME_HINTS))
-
-            if amt < 0 or is_mine_from:
-                txn_type = "expense"
-                other_person = to
+            if amt < 0:
+                txn_type     = "expense"
+                other_person = to if to else frm
             else:
-                txn_type = "income"
-                other_person = frm
+                txn_type     = "income"
+                other_person = frm if frm else to
 
             full_note = f"{note} ({other_person})" if other_person else note
+            date_iso  = self._parse_date(dt_raw)
+            if not date_iso:
+                print(f"  -> skip: bad date {repr(dt_raw)}")
+                ignored += 1
+                continue
 
-            date_iso = self._parse_date(get_dt(row))
-            if not date_iso: ignored += 1; continue
-
-            r = self._add_txn(date_iso, txn_type, full_note, amt, "Venmo",
-                              target_month, target_year)
-            if r == "added": count += 1
-            else: skipped += 1
-        return count, ignored, skipped
+            result = self._add_txn(date_iso, txn_type, full_note, amt, "Venmo",
+                          target_month, target_year)
+            print(f"  -> {result}: {full_note} {amt:+.2f} on {date_iso[:10]}")
+            if result == "added":
+                count += 1
+        print(f"[Venmo] TOTAL: {count} added, {ignored} ignored out of {row_num} rows")
+        return count, ignored, 0
 
     def _show_unmatched_panel(self):
         """Build the per-transaction category assignment panel for 📦 Other rows."""
@@ -1144,17 +1245,24 @@ class ImportCSVFrame(tk.Frame):
     def _import_all(self):
         if not self.preview_data:
             messagebox.showinfo("Babe...","Bestie, you need to pick a file 😭"); return
+        target_month = MONTHS.index(self.filter_month.get()) + 1
+        target_year  = int(self.filter_year.get())
         existing = {(t["date"][:10],t["note"],t["amount"]) for t in self.app.data["transactions"]}
-        added = dupes = 0
+        added = dupes = skipped_month = 0
         mem = self.app.data.setdefault("cat_memory", {})
         for t in self.preview_data:
-            key = (t["date"][:10],t["note"],t["amount"])
+            # Apply month/year filter at import time
+            row_dt = datetime.fromisoformat(t["date"])
+            if row_dt.month != target_month or row_dt.year != target_year:
+                skipped_month += 1
+                continue
+            key = (t["date"][:10], t["note"], t["amount"])
             if key not in existing:
                 clean = {k:v for k,v in t.items() if k != "_raw_cat"}
                 self.app.data["transactions"].append(clean)
                 existing.add(key)
                 added += 1
-                # Save category memory so similar descriptions auto-match next time
+                # Save category memory
                 if t["category"] != "📦 Other" and t.get("note"):
                     words = re.sub(r"[^a-z0-9 ]","",t["note"].lower()).split()
                     mem_key = " ".join(words[:3]) if words else t["note"].lower()[:20]
@@ -1163,10 +1271,13 @@ class ImportCSVFrame(tk.Frame):
             else:
                 dupes += 1
         save_data(self.app.data)
+        self.app.frames["dashboard"].refresh()
+        self.app.frames["transactions"].refresh()
         self.status.configure(
-            text=f"🎉 Imported {added} transactions. No judgment. Okay a LITTLE judgment. ({len(self.preview_data)-added} dupes skipped 🙏)",
+            text=f"🎉 Imported {added} transactions for {self.filter_month.get()} {target_year}! "
+                 f"({dupes} dupes skipped, {skipped_month} other-month rows ignored 🗓️)",
             fg=T["ACCENT2"])
-        messagebox.showinfo("Okay... 😤",f"Imported {added} transactions. We're gonna be okay 🌸")
+        messagebox.showinfo("Okay... 😤", f"Imported {added} transactions. We're gonna be okay 🌸")
 
     def refresh(self): pass
 
@@ -1683,7 +1794,7 @@ class SummaryFrame(tk.Frame):
         tk.Label(row, text=range_label, font=FNT_B, bg=T["BG"], fg=T["SUBTEXT"]).pack(side="left", padx=6)
         for title,val,col in [("Money In 🙏",income,"#7DC99A"),
                                ("Money Gone 💀",expense,"#E07A7A"),
-                               ("What's Left 😬",income-expense,T["ACCENT2"])]:
+                               ("What's Left 😬",income-expense,T["ACCENT"])]:
             c=tk.Frame(row,bg=T["WHITE"],highlightbackground=T["BORDER"],
                        highlightthickness=1,padx=16,pady=10)
             c.pack(side="left",expand=True,fill="both",padx=6)
