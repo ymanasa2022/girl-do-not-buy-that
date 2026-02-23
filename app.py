@@ -88,7 +88,8 @@ DATA_FILE = os.path.join(os.path.expanduser("~"), "girl_do_not_buy_that_data.jso
 
 CATEGORIES = ["🛍️ Shopping","🍔 Restaurants","🫑 Grocery","💅 Self-care",
               "🚗 Transport","🎉 Entertainment","✈️ Travel","💡 Utilities",
-              "🏥 Medical","💼 Income","🔂 Subscriptions","🤕 Insurance","🅿️ Parking","📦 Other"]
+              "🏥 Medical","💼 Income","🔂 Subscriptions","🤕 Insurance","🅿️ Parking",
+              "↩️ Returns & Cashback","📦 Other"]
 
 # All keys must be LOWERCASE — map_cat lowercases the raw value before matching
 APPLE_MAP = {
@@ -962,15 +963,22 @@ class ImportCSVFrame(tk.Frame):
 
     def _parse_credit(self, path, target_month, target_year):
         """
-        Credit card CSV:
-        Transaction Date, Post Date, Description, Category, Type, Amount
-        Type: Sale/Purchase/Debit → expense | Return/Credit/Refund → income
-        Amount is already signed (negative = expense)
+        Handles Apple Card and Chase credit card (7472) CSVs.
+
+        Apple Card columns: Transaction Date, Description, Merchant, Category, Type, Amount (USD)
+          Type=Purchase  → expense  (amount is positive)
+          Type=Debit     → cashback (amount is positive, treat as ↩️ Returns & Cashback)
+          Type=Credit    → return   (amount is negative, treat as ↩️ Returns & Cashback)
+          Type=Payment   → skip     (credit card payment from bank)
+
+        Chase credit (7472) columns: Transaction Date, Post Date, Description, Category, Type, Amount
+          Type=Sale      → expense  (amount is negative)
+          Type=Return    → return   (amount is positive, ↩️ Returns & Cashback)
+          skip: autopay / online payment rows
         """
-        SKIP_TYPES  = set()  # credit cards don't have bank transfer rows
-        SKIP_DESCS  = ["automatic payment", "autopay", "online payment",
-                       "mobile payment", "ach payment"]
-        count = ignored = skipped = 0
+        SKIP_DESCS = ["automatic payment", "autopay", "online payment",
+                      "mobile payment", "ach payment", "internet transfer"]
+        count = ignored = 0
         with open(path, newline="", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
             hmap = {h.lower().strip(): h for h in (reader.fieldnames or [])}
@@ -979,44 +987,70 @@ class ImportCSVFrame(tk.Frame):
                     for hk, orig in hmap.items():
                         if k in hk: return lambda row, o=orig: row.get(o, "").strip()
                 return lambda row: ""
-            get_date  = get("transaction date", "date")
-            get_desc  = get("description", "merchant")
-            get_cat   = get("category")
-            get_type  = get("type")
-            get_amt   = get("amount")
+            get_date = get("transaction date", "date")
+            get_desc = get("description", "merchant")
+            get_cat  = get("category")
+            get_type = get("type")
+            get_amt  = get("amount")
+
             for row in reader:
-                amt = self._parse_amount(get_amt(row))
+                amt  = self._parse_amount(get_amt(row))
                 if amt is None: continue
-                note = get_desc(row)
+                note = get_desc(row).strip()
                 if not note: continue
-                if any(p in note.lower() for p in SKIP_DESCS):
+                note_low = note.lower()
+                if any(p in note_low for p in SKIP_DESCS):
                     ignored += 1; continue
-                tl = get_type(row).lower()
-                if tl in {"sale","purchase","debit","payment"}:
-                    txn_type = "expense"
-                elif tl in {"return","credit","refund"}:
+
+                tl = get_type(row).lower().strip()
+
+                # Payment rows (credit card payment from bank account) — skip
+                if tl == "payment":
+                    ignored += 1; continue
+
+                # Cashback (Apple Card "Debit" = Daily Cash — money back to you)
+                if tl == "debit":
                     txn_type = "income"
+                    raw_cat  = "↩️ Returns & Cashback"
+                # Return or Credit (money back from a purchase return)
+                elif tl in {"return", "credit", "refund"}:
+                    txn_type = "income"
+                    raw_cat  = "↩️ Returns & Cashback"
+                # Normal purchase / sale
+                elif tl in {"purchase", "sale"}:
+                    txn_type = "expense"
+                    raw_cat  = get_cat(row)
                 else:
+                    # Fallback: positive = income, negative = expense
                     txn_type = "income" if amt > 0 else "expense"
+                    raw_cat  = get_cat(row)
+
                 date_iso = self._parse_date(get_date(row))
                 if not date_iso: ignored += 1; continue
-                r = self._add_txn(date_iso, txn_type, note, amt, get_cat(row),
-                                  target_month, target_year)
+                self._add_txn(date_iso, txn_type, note, abs(amt), raw_cat,
+                              target_month, target_year)
                 count += 1
         return count, ignored, 0
 
     def _parse_debit(self, path, target_month, target_year):
         """
-        Bank/Debit CSV:
-        Details, Posting Date, Description, Amount, Type, Balance
-        Details=DEBIT → expense, Details=CREDIT → income
-        Skip payments toward credit cards.
+        Chase bank/debit (8510) CSV.
+        Columns: Details, Posting Date, Description, Amount, Type, Balance
+
+        Details col:
+          DEBIT  → expense (money out)
+          CREDIT → income  (money in)
+
+        Type col (used as fallback / additional signal):
+          ACH_DEBIT / CHASE_TO_PARTNERFI → expense
+          ACH_CREDIT                     → income
+
+        Skip: payments to own credit cards and internal transfers.
         """
         SKIP_DESCS = CREDIT_CARD_PAYMENT_PHRASES + [
-            "zelle payment to", "external transfer",
-            "ach deposit", "internet transfer",
+            "zelle payment to", "external transfer", "internet transfer",
         ]
-        count = ignored = skipped = 0
+        count = ignored = 0
         with open(path, newline="", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
             hmap = {h.lower().strip(): h for h in (reader.fieldnames or [])}
@@ -1028,44 +1062,53 @@ class ImportCSVFrame(tk.Frame):
             get_details = get("details")
             get_date    = get("posting date", "date")
             get_desc    = get("description")
+            get_type    = get("type")
             get_amt     = get("amount")
+
             for row in reader:
                 amt = self._parse_amount(get_amt(row))
                 if amt is None: continue
-                note = get_desc(row).strip()
-                # Collapse whitespace (Chase descriptions have tons of spaces)
-                note = re.sub(r"\s+", " ", note)
+                note = re.sub(r"\s+", " ", get_desc(row).strip())
                 if not note: continue
                 note_low = note.lower()
-                # Skip credit card payments (already counted as expenses)
                 if any(p in note_low for p in SKIP_DESCS):
                     ignored += 1; continue
-                details = get_details(row).upper()
-                if details == "CREDIT":
-                    txn_type = "income"
-                elif details == "DEBIT":
+
+                details = get_details(row).strip().upper()
+                type_col = get_type(row).strip().upper()
+
+                # Primary signal: Details column
+                if details == "DEBIT":
                     txn_type = "expense"
+                elif details == "CREDIT":
+                    txn_type = "income"
+                # Fallback: Type column
+                elif type_col in {"ACH_DEBIT", "CHASE_TO_PARTNERFI"}:
+                    txn_type = "expense"
+                elif type_col == "ACH_CREDIT":
+                    txn_type = "income"
                 else:
-                    txn_type = "income" if amt > 0 else "expense"
+                    txn_type = "expense" if amt < 0 else "income"
+
                 date_iso = self._parse_date(get_date(row))
                 if not date_iso: ignored += 1; continue
-                r = self._add_txn(date_iso, txn_type, note, amt, "",
-                                  target_month, target_year)
+                self._add_txn(date_iso, txn_type, note, abs(amt), "",
+                              target_month, target_year)
                 count += 1
         return count, ignored, 0
 
     def _parse_venmo(self, path, target_month, target_year):
         """
-        Venmo CSV: skip junk header rows, find the data section.
-        From=someone else, To=you → income
-        From=you, To=someone else → expense
-        Amount in parens = negative (expense)
-        Skip rows that duplicate bank statement (funded from bank account).
-        """
-        MY_NAME_HINTS = ["manasa", "yadavalli"]  # adapt from account header if possible
-        count = ignored = skipped = 0
+        Venmo CSV (comma-separated with 2 junk header rows).
+        Columns: ID, Datetime, Type, Status, Note, From, To, Amount (total), ...
 
-        # Try multiple encodings — Venmo CSVs vary
+        Amount: positive (+ $17.00) = received = income
+                negative (- $40.00) = sent     = expense
+        Status must be "Complete". No bank-funded filter (user tracks at face value).
+        """
+        count = ignored = 0
+
+        # Read with multiple encoding fallbacks
         content_lines = None
         for enc in ("utf-8-sig", "utf-8", "latin-1", "cp1252"):
             try:
@@ -1077,93 +1120,64 @@ class ImportCSVFrame(tk.Frame):
         if not content_lines:
             return 0, 0, 0
 
-        # Extract account name from header line (@handle)
-        my_name = ""
-        for line in content_lines[:5]:
-            m = re.search(r"@([\w-]+)", line)
-            if m:
-                my_name = m.group(1).lower().replace("-", " ")
-                break
-
-        # Find the header row — look for "Datetime" and "From" in same line
-        # Venmo TSV has tab-separated headers; check both raw and stripped
+        # Find the real header row (contains "Datetime" and "From")
         header_idx = None
         for i, line in enumerate(content_lines):
             ll = line.lower()
-            if "datetime" in ll and "from" in ll and "to" in ll:
+            if "datetime" in ll and "from" in ll:
                 header_idx = i
                 break
-        if header_idx is None:
-            # Fallback: look for just "datetime"
-            for i, line in enumerate(content_lines):
-                if "datetime" in line.lower():
-                    header_idx = i
-                    break
         if header_idx is None:
             return 0, 0, 0
 
         import io
         data_block = "".join(content_lines[header_idx:])
-        # Venmo exports are TAB-separated — must set delimiter
-        reader = csv.DictReader(io.StringIO(data_block))  # Venmo CSV is comma-separated
-        # Strip whitespace from field names (first column is blank in Venmo)
-        raw_fields = reader.fieldnames or []
-        clean_fields = [f.strip() if f else "" for f in raw_fields]
+        reader = csv.DictReader(io.StringIO(data_block))
+        # Strip whitespace from field names (leading blank column in Venmo)
+        clean_fields = [f.strip() if f else "" for f in (reader.fieldnames or [])]
         reader.fieldnames = clean_fields
 
         def gv(row, *keys):
-            """Case-insensitive partial-key lookup for a TSV row."""
             for k in keys:
                 for field in clean_fields:
                     if field and k.lower() in field.lower():
                         return row.get(field, "").strip()
             return ""
 
-        row_num = 0
         for row in reader:
-            row_num += 1
-            status = gv(row, "status").lower()
-            amt_raw = gv(row, "amount (total)", "amount")
-            amt = self._parse_amount(amt_raw)
-            dt_raw = gv(row, "datetime")
-            fund = gv(row, "funding source").lower()
-            print(f"[Venmo row {row_num}] status={repr(status)} amt={repr(amt_raw)}->{amt} dt={repr(dt_raw[:19] if dt_raw else '')} fund={repr(fund[:20])}")
-
-            if status != "complete":
-                print(f"  -> skip: status not complete")
+            if gv(row, "status").lower() != "complete":
                 continue
+            amt = self._parse_amount(gv(row, "amount (total)", "amount"))
             if amt is None or amt == 0:
-                print(f"  -> skip: bad amount")
-                continue
-            if any(x in fund for x in ("checking", "chase", "bank", "jpmorgan")):
-                print(f"  -> skip: bank funded")
-                ignored += 1
                 continue
 
             frm  = gv(row, "from")
             to   = gv(row, "to")
             note = clean_venmo_note(gv(row, "note")) or "Venmo"
 
-            if amt < 0:
-                txn_type     = "expense"
-                other_person = to if to else frm
-            else:
-                txn_type     = "income"
-                other_person = frm if frm else to
-
-            full_note = f"{note} ({other_person})" if other_person else note
-            date_iso  = self._parse_date(dt_raw)
-            if not date_iso:
-                print(f"  -> skip: bad date {repr(dt_raw)}")
+            # Skip if funded from bank account (will appear on Chase debit statement)
+            fund = gv(row, "funding source").lower()
+            if any(x in fund for x in ("jpmorgan", "chase", "checking", "bank")):
                 ignored += 1
                 continue
 
-            result = self._add_txn(date_iso, txn_type, full_note, amt, "Venmo",
+            # Positive amount = received (income), negative = sent (expense)
+            if amt > 0:
+                txn_type     = "income"
+                other_person = frm if frm else to
+            else:
+                txn_type     = "expense"
+                other_person = to if to else frm
+
+            full_note = f"{note} ({other_person})" if other_person else note
+            date_iso  = self._parse_date(gv(row, "datetime"))
+            if not date_iso:
+                ignored += 1
+                continue
+
+            self._add_txn(date_iso, txn_type, full_note, abs(amt), "Venmo",
                           target_month, target_year)
-            print(f"  -> {result}: {full_note} {amt:+.2f} on {date_iso[:10]}")
-            if result == "added":
-                count += 1
-        print(f"[Venmo] TOTAL: {count} added, {ignored} ignored out of {row_num} rows")
+            count += 1
         return count, ignored, 0
 
     def _show_unmatched_panel(self):
