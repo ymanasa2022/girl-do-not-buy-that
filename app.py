@@ -89,7 +89,7 @@ DATA_FILE = os.path.join(os.path.expanduser("~"), "girl_do_not_buy_that_data.jso
 CATEGORIES = ["🛍️ Shopping","🍔 Restaurants","🫑 Grocery","💅 Self-care",
               "🚗 Transport","🎉 Entertainment","✈️ Travel","💡 Utilities",
               "🏥 Medical","💼 Income","🔂 Subscriptions","🤕 Insurance","🅿️ Parking",
-              "↩️ Returns & Cashback","📦 Other"]
+              "📦 Other"]
 
 # All keys must be LOWERCASE — map_cat lowercases the raw value before matching
 APPLE_MAP = {
@@ -1051,7 +1051,11 @@ class ImportCSVFrame(tk.Frame):
         """Always add to preview — month filter and dupe check happen at import time."""
         cat = self._lookup_cat_memory(note)
         if not cat:
-            cat = map_cat(raw_cat)
+            # If raw_cat is already a known final category, use it directly
+            if raw_cat in CATEGORIES:
+                cat = raw_cat
+            else:
+                cat = map_cat(raw_cat)
         raw_for_panel = None
         if cat == "📦 Other":
             raw_for_panel = raw_cat or note[:30]
@@ -1113,14 +1117,15 @@ class ImportCSVFrame(tk.Frame):
                 if tl == "payment":
                     ignored += 1; continue
 
-                # Cashback (Apple Card "Debit" = Daily Cash — money back to you)
+                # Cashback (Apple Card "Debit" = Daily Cash → Income)
                 if tl == "debit":
                     txn_type = "income"
-                    raw_cat  = "↩️ Returns & Cashback"
-                # Return or Credit (money back from a purchase return)
+                    raw_cat  = "💼 Income"
+                # Return or Credit — income but keep the SAME category as the purchase
+                # so it offsets that category's total (e.g. Best Buy return → Shopping)
                 elif tl in {"return", "credit", "refund"}:
                     txn_type = "income"
-                    raw_cat  = "↩️ Returns & Cashback"
+                    raw_cat  = get_cat(row)   # keep original category (Shopping, Grocery, etc.)
                 # Normal purchase / sale
                 elif tl in {"purchase", "sale"}:
                     txn_type = "expense"
@@ -1154,6 +1159,7 @@ class ImportCSVFrame(tk.Frame):
         """
         SKIP_DESCS = CREDIT_CARD_PAYMENT_PHRASES + [
             "zelle payment to", "external transfer", "internet transfer",
+            "venmo payment",  # already tracked in Venmo CSV
         ]
         count = ignored = 0
         with open(path, newline="", encoding="utf-8-sig") as f:
