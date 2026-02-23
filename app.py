@@ -552,10 +552,11 @@ class TransactionsFrame(tk.Frame):
     def _on_double_click(self, event):
         sel = self.tree.selection()
         if not sel: return
-        txns_sorted = sorted(self.app.data["transactions"], key=lambda t: t["date"], reverse=True)
-        idx = self.tree.index(sel[0])
-        t = txns_sorted[idx]
-        self._editing_idx = self.app.data["transactions"].index(t)
+        iid = sel[0]
+        master_idx = getattr(self, "_iid_to_txn", {}).get(iid, -1)
+        if master_idx < 0 or master_idx >= len(self.app.data["transactions"]): return
+        t = self.app.data["transactions"][master_idx]
+        self._editing_idx = master_idx
 
         # Populate form fields with selected transaction
         self.type_var.set(t["type"])
@@ -685,8 +686,13 @@ class TransactionsFrame(tk.Frame):
             txns = [t for t in txns if datetime.fromisoformat(t["date"]).month == m]
         if year_filter != "All":
             txns = [t for t in txns if datetime.fromisoformat(t["date"]).year == int(year_filter)]
+        self._iid_to_txn = {}  # iid → index in self.app.data["transactions"]
+        all_txns = self.app.data["transactions"]
         for t in txns:
             sign = "+" if t["type"]=="income" else "-"
+            # Find index in master list for this transaction
+            try: master_idx = all_txns.index(t)
+            except ValueError: master_idx = -1
             iid = self.tree.insert("","end", values=(
                 "☐",
                 t["date"][:10],
@@ -694,6 +700,7 @@ class TransactionsFrame(tk.Frame):
                 f"{sign}${t['amount']:.2f}"
             ))
             self._checked[iid] = False
+            self._iid_to_txn[iid] = master_idx
         self._update_sel_label()
 
 
@@ -736,29 +743,19 @@ def clean_venmo_note(note):
 class ImportCSVFrame(tk.Frame):
     def __init__(self, parent, app):
         super().__init__(parent, bg=T["BG"])
-        self.app = app; self.preview_data = []
+        self.app = app
+        self.preview_data = []
+        self._loaded_files = {}
+        self._current_file_label = ""
+        self._active_filter = None
         self._build()
 
     def _build(self):
         tk.Label(self, text="📥 Drop the Evidence, Bestie", font=FNT_TITLE,
                  bg=T["BG"], fg=T["TEXT"]).pack(pady=(18,4))
 
-        # ── Statement type selector ───────────────────────────────
-        type_f = tk.Frame(self, bg=T["WHITE"], highlightbackground=T["BORDER"],
-                          highlightthickness=1, padx=22, pady=12)
-        type_f.pack(fill="x", padx=28, pady=(0,6))
-        tk.Label(type_f, text="Statement type:", font=FNT_B,
-                 bg=T["WHITE"], fg=T["TEXT"]).pack(side="left")
-        self.fmt_var = tk.StringVar(value="auto")
-        for val, lbl in [("auto","🔍 Auto-detect"),("credit","💳 Credit Card"),
-                         ("debit","🏦 Debit / Bank"),("venmo","💸 Venmo")]:
-            tk.Radiobutton(type_f, text=lbl, variable=self.fmt_var, value=val,
-                           font=FNT, bg=T["WHITE"], fg=T["TEXT"],
-                           selectcolor=T["ACCENT2"], activebackground=T["WHITE"]
-                           ).pack(side="left", padx=10)
-
         # ── Month/Year filter ──────────────────────────────────────
-        filter_f = tk.Frame(self, bg=T["BG"]); filter_f.pack(pady=(6,2))
+        filter_f = tk.Frame(self, bg=T["BG"]); filter_f.pack(pady=(4,2))
         tk.Label(filter_f, text="Import for:", font=FNT, bg=T["BG"], fg=T["TEXT"]).pack(side="left")
         now = datetime.now()
         self.filter_month = tk.StringVar(value=MONTHS[now.month-1])
@@ -771,29 +768,45 @@ class ImportCSVFrame(tk.Frame):
         tk.Label(filter_f, text="(only rows in this month/year will import)",
                  font=FNT_S, bg=T["BG"], fg=T["SUBTEXT"]).pack(side="left", padx=8)
 
+        # ── Buttons ────────────────────────────────────────────────
         br = tk.Frame(self, bg=T["BG"]); br.pack(pady=6)
-        btn(br, "📂 Upload the Receipts", self._browse).pack(side="left", padx=6)
+        btn(br, "📂 Add Files", self._browse).pack(side="left", padx=6)
+        btn(br, "🗑️ Clear All", self._clear_files,
+            color="#888888", fg="#ffffff").pack(side="left", padx=6)
         btn(br, "😤 Import All (Deep Breath)", self._import_all,
             color="#7DC99A", fg="#000000").pack(side="left", padx=6)
-        btn(br, "🔬 Debug File", self._debug_csv,
-            color="#888888", fg="#ffffff").pack(side="left", padx=6)
+
+        # ── Loaded files list ──────────────────────────────────────
+        self.files_frame = tk.Frame(self, bg=T["BG"])
+        self.files_frame.pack(fill="x", padx=28, pady=(0,4))
 
         self.status = tk.Label(self, text="", font=FNT, bg=T["BG"], fg=T["SUBTEXT"])
         self.status.pack()
         self.unmatched_frame = tk.Frame(self, bg=T["BG"])
         self.unmatched_frame.pack(fill="x", padx=28, pady=(0,4))
         self._cat_vars = {}
-        tk.Label(self, text="Crime Scene Preview 🔍", font=FNT_B,
-                 bg=T["BG"], fg=T["TEXT"]).pack(anchor="w", padx=28, pady=(8,2))
+
+        # ── Preview header + filter bar ───────────────────────────
+        prev_hdr = tk.Frame(self, bg=T["BG"]); prev_hdr.pack(fill="x", padx=28, pady=(8,2))
+        tk.Label(prev_hdr, text="Crime Scene Preview 🔍", font=FNT_B,
+                 bg=T["BG"], fg=T["TEXT"]).pack(side="left")
+        # filter chips live here (rebuilt by _refresh_filter_bar)
+        self.filter_bar = tk.Frame(prev_hdr, bg=T["BG"])
+        self.filter_bar.pack(side="left", padx=12)
+
         wrap = tk.Frame(self, bg=T["BG"])
         wrap.pack(fill="both", expand=True, padx=28, pady=(0,8))
-        cols = ("Date","Type","Category","Description/Merchant","Amount")
+        cols = ("File","Date","Type","Category","Description/Merchant","Amount")
         self.tree = ttk.Treeview(wrap, columns=cols, show="headings", style="A.Treeview")
-        for col,w in zip(cols,[100,80,150,270,110]):
+        for col,w in zip(cols,[130,90,75,140,250,100]):
             self.tree.heading(col,text=col); self.tree.column(col,width=w,anchor="center")
         sb2 = ttk.Scrollbar(wrap, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=sb2.set)
         self.tree.pack(side="left", fill="both", expand=True); sb2.pack(side="right", fill="y")
+
+        # Track loaded file paths, detected types, and active filter
+        self._loaded_files = {}       # path → fmt
+        self._active_filter = None    # None = show all, str = show only this file label
 
     def retheme(self):
         self.configure(bg=T["BG"])
@@ -869,9 +882,96 @@ class ImportCSVFrame(tk.Frame):
         txt.configure(state="disabled")
 
     def _browse(self):
-        path = filedialog.askopenfilename(title="Select CSV",
+        paths = filedialog.askopenfilenames(title="Select CSV files",
                filetypes=[("CSV files","*.csv"),("All files","*.*")])
-        if path: self._load_csv(path)
+        for path in paths:
+            if path and path not in self._loaded_files:
+                self._load_csv(path)
+
+    def _clear_files(self):
+        self._loaded_files = {}
+        self._active_filter = None
+        self.preview_data = []
+        for row in self.tree.get_children(): self.tree.delete(row)
+        for w in self.files_frame.winfo_children(): w.destroy()
+        for w in self.unmatched_frame.winfo_children(): w.destroy()
+        self.status.configure(text="")
+        self._refresh_filter_bar()
+
+    def _refresh_files_panel(self):
+        """Rebuild the file chips panel — each chip is clickable to filter preview."""
+        for w in self.files_frame.winfo_children(): w.destroy()
+        if not self._loaded_files: return
+        for path, fmt in self._loaded_files.items():
+            fname = os.path.basename(path)
+            flabel = fname[:18]
+            icon = {"credit":"💳","debit":"🏦","venmo":"💸"}.get(fmt,"📄")
+            tag = {"credit":"Credit Card","debit":"Bank/Debit","venmo":"Venmo"}.get(fmt, fmt)
+            active = (self._active_filter == flabel)
+            bg_col = T["ACCENT2"] if active else T["WHITE"]
+            fg_col = "white" if active else T["TEXT"]
+            sub_col = "white" if active else T["SUBTEXT"]
+            chip = tk.Frame(self.files_frame, bg=bg_col,
+                            highlightbackground=T["ACCENT2"] if active else T["BORDER"],
+                            highlightthickness=2 if active else 1,
+                            padx=10, pady=4, cursor="hand2")
+            chip.pack(side="left", padx=4, pady=4)
+            lbl1 = tk.Label(chip, text=f"{icon} {fname}", font=FNT_S, bg=bg_col, fg=fg_col)
+            lbl1.pack(side="left")
+            lbl2 = tk.Label(chip, text=f"  [{tag}]", font=FNT_S, bg=bg_col, fg=sub_col)
+            lbl2.pack(side="left")
+            # Click to filter (toggle off if already active)
+            def make_click(fl=flabel):
+                def on_click(e=None):
+                    self._active_filter = None if self._active_filter == fl else fl
+                    self._refresh_files_panel()
+                    self._refresh_filter_bar()
+                    self._apply_tree_filter()
+                return on_click
+            cb = make_click()
+            for w in (chip, lbl1, lbl2): w.bind("<Button-1>", cb)
+
+    def _refresh_filter_bar(self):
+        """Show active filter indicator next to preview label."""
+        if not hasattr(self, "filter_bar"): return
+        for w in self.filter_bar.winfo_children(): w.destroy()
+        if self._active_filter:
+            pill = tk.Frame(self.filter_bar, bg=T["ACCENT2"], padx=8, pady=2)
+            pill.pack(side="left")
+            tk.Label(pill, text=f"showing: {self._active_filter}  ✕",
+                     font=FNT_S, bg=T["ACCENT2"], fg="white", cursor="hand2").pack()
+            pill.bind("<Button-1>", lambda e: self._clear_filter())
+            pill.winfo_children()[0].bind("<Button-1>", lambda e: self._clear_filter())
+        else:
+            tk.Label(self.filter_bar, text="(click a file to filter)",
+                     font=FNT_S, bg=T["BG"], fg=T["SUBTEXT"]).pack(side="left")
+
+    def _clear_filter(self):
+        self._active_filter = None
+        self._refresh_files_panel()
+        self._refresh_filter_bar()
+        self._apply_tree_filter()
+
+    def _apply_tree_filter(self):
+        """Show/hide tree rows based on active file filter."""
+        for row in self.tree.get_children():
+            vals = self.tree.item(row, "values")
+            file_col = vals[0] if vals else ""
+            if self._active_filter is None or file_col == self._active_filter:
+                self.tree.item(row, tags=())
+            else:
+                # Detach rows that don't match — we rebuild instead
+                pass
+        # Easier: just repopulate the tree from preview_data filtered
+        for row in self.tree.get_children(): self.tree.delete(row)
+        for t in self.preview_data:
+            flabel = t.get("_file","")
+            if self._active_filter and flabel != self._active_filter:
+                continue
+            sign = "+" if t["type"] == "income" else "-"
+            self.tree.insert("", "end", values=(
+                flabel, t["date"][:10], t["type"].capitalize(),
+                t["category"], t["note"], f"{sign}${t['amount']:.2f}"))
 
     def _remember_cat(self, note, cat):
         """Store description→category mapping for future auto-matching."""
@@ -912,53 +1012,58 @@ class ImportCSVFrame(tk.Frame):
         return None
 
     def _load_csv(self, path):
-        self.preview_data = []
-        for row in self.tree.get_children(): self.tree.delete(row)
+        """Load one CSV file, auto-detect its type, append to preview."""
         target_month = MONTHS.index(self.filter_month.get()) + 1
         target_year  = int(self.filter_year.get())
-
-        fmt = self.fmt_var.get()
-        if fmt == "auto":
-            fmt = detect_csv_format(path)
-            self.fmt_var.set(fmt)
+        fmt = detect_csv_format(path)
+        self._loaded_files[path] = fmt
+        self._refresh_files_panel()
+        # Short label for the File column in preview tree
+        self._current_file_label = os.path.basename(path)[:18]
 
         try:
             if fmt == "credit":
-                count, ignored, skipped = self._parse_credit(path, target_month, target_year)
+                count, ignored, _ = self._parse_credit(path, target_month, target_year)
             elif fmt == "debit":
-                count, ignored, skipped = self._parse_debit(path, target_month, target_year)
+                count, ignored, _ = self._parse_debit(path, target_month, target_year)
             elif fmt == "venmo":
-                count, ignored, skipped = self._parse_venmo(path, target_month, target_year)
+                count, ignored, _ = self._parse_venmo(path, target_month, target_year)
             else:
-                count, ignored, skipped = self._parse_credit(path, target_month, target_year)
+                count, ignored, _ = self._parse_credit(path, target_month, target_year)
 
-            month_label = f"{self.filter_month.get()} {target_year}"
+            total = len(self.preview_data)
             m_label = f"{self.filter_month.get()} {int(self.filter_year.get())}"
             self.status.configure(
-                text=f"👀 {count} transactions loaded — {ignored} skipped (payments/transfers). "
-                     f"Hit Import to save {m_label} rows (dupes will be skipped automatically).",
+                text=f"👀 {total} transactions across {len(self._loaded_files)} file(s) — "
+                     f"last file: {count} loaded, {ignored} skipped. "
+                     f"Import saves {m_label} rows (dupes skipped automatically).",
                 fg="#7DC99A")
+            self._refresh_filter_bar()
             self._show_unmatched_panel()
         except Exception as e:
             import traceback
             messagebox.showerror("Error", f"Could not read CSV:\n{e}\n\n{traceback.format_exc()}")
             self.status.configure(text=f"❌ Error: {e}", fg="#E07A7A")
+            self._loaded_files.pop(path, None)
+            self._refresh_files_panel()
 
     def _add_txn(self, date_iso, txn_type, note, amount, raw_cat, target_month, target_year):
         """Always add to preview — month filter and dupe check happen at import time."""
-        # Check category memory first, then APPLE_MAP, then Other
         cat = self._lookup_cat_memory(note)
         if not cat:
             cat = map_cat(raw_cat)
         raw_for_panel = None
         if cat == "📦 Other":
             raw_for_panel = raw_cat or note[:30]
+        file_label = getattr(self, "_current_file_label", "")
         txn = {"date": date_iso, "type": txn_type, "category": cat,
-               "note": note, "amount": abs(amount), "_raw_cat": raw_for_panel}
+               "note": note, "amount": abs(amount), "_raw_cat": raw_for_panel,
+               "_file": file_label}
         self.preview_data.append(txn)
         sign = "+" if txn_type == "income" else "-"
         self.tree.insert("", "end", values=(
-            date_iso[:10], txn_type.capitalize(), cat, note, f"{sign}${abs(amount):.2f}"))
+            file_label, date_iso[:10], txn_type.capitalize(), cat, note,
+            f"{sign}${abs(amount):.2f}"))
         return "added"
 
     def _parse_credit(self, path, target_month, target_year):
