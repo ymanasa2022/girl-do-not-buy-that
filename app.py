@@ -2084,7 +2084,21 @@ class SummaryFrame(tk.Frame):
             if event.inaxes != ax1 or not exp_by_cat: return
             for i, wedge in enumerate(pie_wedges):
                 if wedge.contains_point([event.x, event.y]):
-                    self.app.frames["transactions"].filter_cat.set(labels[i])
+                    txn_frame = self.app.frames["transactions"]
+                    mode = self.range_mode.get()
+                    # Set category filter
+                    txn_frame.filter_cat.set(labels[i])
+                    # Set month/year to match the chart's date selection
+                    if mode == "single":
+                        txn_frame.filter_month.set(self.month_var.get())
+                        txn_frame.filter_year.set(str(self.year_var.get()))
+                    elif mode == "year":
+                        txn_frame.filter_month.set("All")
+                        txn_frame.filter_year.set(str(self.year_only_var.get()))
+                    else:
+                        # Date range — can't map cleanly to single month/year, show all time for that category
+                        txn_frame.filter_month.set("All")
+                        txn_frame.filter_year.set("All")
                     self.app.show_frame("transactions")
                     return
         canvas.mpl_connect("button_press_event", on_click)
